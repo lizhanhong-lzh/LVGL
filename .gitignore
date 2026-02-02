@@ -1,0 +1,33 @@
+# PC simulator build output
+/build/
+
+# CMake generated
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+
+# Tooling probe logs / artifacts
+/artifacts/
+
+# Common logs
+*.log
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Python
+__pycache__/
+*.pyc
+
+# Keil/MDK build outputs (optional; keep if you want them in repo)
+/LVGLyizhiketang1/Output/*.o
+/LVGLyizhiketang1/Output/*.d
+/LVGLyizhiketang1/Output/*.crf
+/LVGLyizhiketang1/Output/*.htm
+/LVGLyizhiketang1/Output/*.map
+/LVGLyizhiketang1/Output/*.lst
+/LVGLyizhiketang1/Output/*.axf
+/LVGLyizhiketang1/Output/*.bin
+/LVGLyizhiketang1/Output/*.hex

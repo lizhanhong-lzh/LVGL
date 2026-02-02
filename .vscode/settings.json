@@ -1,0 +1,9 @@
+{
+  "cmake.sourceDirectory": "${workspaceFolder}",
+  "cmake.configureOnOpen": true,
+  "files.associations": {
+    "*.h": "c"
+  },
+  "keil.uv4Path": "C:\\Keil_v5\\UV4\\UV4.exe",
+  "keil.targetName": "LVGL"
+}
