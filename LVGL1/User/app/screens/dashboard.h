@@ -55,6 +55,9 @@ void dashboard_debug_update(const dashboard_debug_info_t *info);
 /* 弹出消息提示（auto_close_ms=0 表示不自动关闭） */
 void dashboard_show_message(const char *text, uint32_t auto_close_ms);
 
+/* 当前是否处于消息弹窗显示状态（用于暂停主界面刷新） */
+int dashboard_message_is_active(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -49,14 +49,14 @@
             <NotGenerated>0</NotGenerated>
             <InvalidFlash>1</InvalidFlash>
           </TargetStatus>
-          <OutputDirectory>..\..\Output\</OutputDirectory>
+          <OutputDirectory>D:\LVGL\LVGL1\Output\</OutputDirectory>
           <OutputName>atk_f767</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
           <CreateHexFile>1</CreateHexFile>
           <DebugInformation>1</DebugInformation>
           <BrowseInformation>1</BrowseInformation>
-          <ListingPath>..\..\Output\</ListingPath>
+          <ListingPath>D:\LVGL\LVGL1\Output\</ListingPath>
           <HexFormatSelection>1</HexFormatSelection>
           <Merge32K>0</Merge32K>
           <CreateBatchFile>0</CreateBatchFile>
@@ -421,16 +421,6 @@
               <FilePath>..\..\User\app\my_font_30.c</FilePath>
             </File>
             <File>
-              <FileName>my_font_15.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\User\app\my_font_15.c</FilePath>
-            </File>
-            <File>
-              <FileName>my_font_16.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\User\app\my_font_16.c</FilePath>
-            </File>
-            <File>
               <FileName>obuf.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\User\app\obuf.c</FilePath>
@@ -439,6 +429,11 @@
               <FileName>app.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\User\app\app.c</FilePath>
+            </File>
+            <File>
+              <FileName>my_font_16.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\app\my_font_16.c</FilePath>
             </File>
           </Files>
         </Group>

@@ -31,6 +31,7 @@ typedef struct {
     // 通讯状态
     char  port_name[32];    // 串口名称 (e.g. "COM1")
     int   port_connected;   // 连接状态 (1=Connected, 0=Disconnected)
+    int   comm_alive;       // 通信活跃状态 (10s 内有数据增长=1, 否则=0)
     
     // 原始数据/日志 (最新的一条)
     char  last_log_cmd[64]; // 最新的一条指令HEX串 (用于显示)

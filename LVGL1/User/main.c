@@ -28,8 +28,6 @@
 
 #include <string.h>
 #include <stdio.h>
-#include <ctype.h>
-#include <math.h>
 
 /* 正点原子BSP驱动 (Board Support Package) */
 #include "./SYSTEM/sys/sys.h"       /* 系统时钟配置 */
@@ -51,7 +49,7 @@
 /* 串口接收底层 buffer (8KB)
  * 说明：越大越不容易在高峰期被填满，但也会占用更多 RAM
  */
-static uint8_t g_rx_storage[8192];    
+static uint8_t g_rx_storage[16384];    
 
 /* 环形缓冲区管理结构体 (在串口中断和主循环间共享数据) */
 obuf_t g_rx_buf;                      
@@ -79,10 +77,7 @@ static uint8_t g_has_real_data = 0;
 /* 调试信息 */
 static dashboard_debug_info_t g_dbg_info;
 
-static plant_metrics_t g_last_metrics;
-static uint8_t g_last_metrics_valid = 0;
-static dashboard_debug_info_t g_last_dbg_info;
-static uint8_t g_last_dbg_valid = 0;
+static uint8_t g_ui_dirty = 0;
 static uint32_t g_last_dbg_tick = 0;
 static uint32_t g_last_decode_tick = 0;
 /* 解码表刷新缓存：仅保留最近一条 + 时间戳 */
@@ -90,6 +85,8 @@ static char g_decode_name[32];
 static float g_decode_value = 0.0f;
 static uint8_t g_decode_highlight = 0;
 static uint32_t g_decode_last_ms = 0;
+/* 通信活跃检测（10秒内是否收到数据） */
+static uint32_t g_comm_last_rx_ms = 0;
 #endif
 
 /*
@@ -118,13 +115,14 @@ void usart_rx_byte_hook(uint8_t byte)
     obuf_write(&g_rx_buf, &byte, 1);
 
     g_last_rx_byte_ms = HAL_GetTick();
+    g_comm_last_rx_ms = g_last_rx_byte_ms;
 
     /* 调试：统计接收字节数 */
     g_dbg_info.rx_bytes++;
 
     /* 2. 快速连通性验证 (LED Flash) */
     static uint16_t rx_cnt = 0;
-    if (++rx_cnt >= 50) {
+    if (++rx_cnt >= 200) {
         rx_cnt = 0;
         LED0_TOGGLE(); // 翻转 LED0 (红色)
     }
@@ -146,113 +144,6 @@ typedef struct {
     uint8_t has_text;
 } sx_frame_t;
 
-static void ascii_lower_copy(const char *src, char *dst, size_t cap)
-{
-    if (!src || !dst || cap == 0) {
-        return;
-    }
-    size_t i = 0;
-    for (; i + 1 < cap && src[i] != '\0'; i++) {
-        unsigned char c = (unsigned char)src[i];
-        if (c < 0x80) {
-            dst[i] = (char)tolower(c);
-        } else {
-            dst[i] = src[i];
-        }
-    }
-    dst[i] = '\0';
-}
-
-/* 不区分大小写的子串匹配（英文关键词） */
-static int str_contains_ci(const char *s, const char *needle)
-{
-    if (!s || !needle) {
-        return 0;
-    }
-    char s_low[128];
-    char n_low[64];
-    ascii_lower_copy(s, s_low, sizeof(s_low));
-    ascii_lower_copy(needle, n_low, sizeof(n_low));
-    return strstr(s_low, n_low) != NULL;
-}
-
-/* ASCII 字符是否是字母/数字/下划线 (用于英文缩写的词边界判断) */
-static int is_ascii_alnum(char c)
-{
-    if (c >= '0' && c <= '9') return 1;
-    if (c >= 'a' && c <= 'z') return 1;
-    if (c >= 'A' && c <= 'Z') return 1;
-    if (c == '_') return 1;
-    return 0;
-}
-
-/* 英文 token 匹配（可选词边界） */
-/* 英文缩写匹配：默认启用单词边界，避免误匹配 */
-static int contains_token_ci(const char *s, const char *token, int word_boundary)
-{
-    if (!s || !token) return 0;
-    char s_low[160];
-    char t_low[64];
-    ascii_lower_copy(s, s_low, sizeof(s_low));
-    ascii_lower_copy(token, t_low, sizeof(t_low));
-
-    const char *p = s_low;
-    size_t tlen = strlen(t_low);
-    if (tlen == 0) return 0;
-
-    while ((p = strstr(p, t_low)) != NULL) {
-        if (!word_boundary) {
-            return 1;
-        }
-        char prev = (p == s_low) ? '\0' : *(p - 1);
-        char next = *(p + tlen);
-        if (!is_ascii_alnum(prev) && !is_ascii_alnum(next)) {
-            return 1;
-        }
-        p += tlen;
-    }
-    return 0;
-}
-
-/* 英文短语匹配：同时支持带空格/下划线和去空格的匹配 */
-/* 英文短语匹配：支持空格/下划线/连写 */
-static int contains_phrase_ci(const char *s, const char *phrase)
-{
-    if (!s || !phrase) return 0;
-
-    if (str_contains_ci(s, phrase)) {
-        return 1;
-    }
-
-    /* 归一化：去掉空格与下划线，便于匹配 "gravitytoolface" 这种写法 */
-    char s_norm[160];
-    char p_norm[80];
-    size_t si = 0;
-    for (size_t i = 0; s[i] != '\0' && si + 1 < sizeof(s_norm); i++) {
-        char c = s[i];
-        if (c == ' ' || c == '_') continue;
-        if ((unsigned char)c < 0x80) {
-            s_norm[si++] = (char)tolower((unsigned char)c);
-        } else {
-            s_norm[si++] = c;
-        }
-    }
-    s_norm[si] = '\0';
-
-    size_t pi = 0;
-    for (size_t i = 0; phrase[i] != '\0' && pi + 1 < sizeof(p_norm); i++) {
-        char c = phrase[i];
-        if (c == ' ' || c == '_') continue;
-        if ((unsigned char)c < 0x80) {
-            p_norm[pi++] = (char)tolower((unsigned char)c);
-        } else {
-            p_norm[pi++] = c;
-        }
-    }
-    p_norm[pi] = '\0';
-
-    return strstr(s_norm, p_norm) != NULL;
-}
 
 /* 字段识别配置表：与 SQMWD_Tablet 正则规则保持一致，便于扩展新别名 */
 typedef enum {
@@ -275,111 +166,6 @@ typedef enum {
     OLD_DT_MTF  = 0x14         /* 磁性工具面 */
 } probe_data_type_t;
 
-typedef struct {
-    field_kind_t kind;
-    uint8_t highlight;                 /* 是否高亮（同步头） */
-    const char *desc;                  /* 备注说明，便于维护 */
-    const char * const *cn_keywords;   /* 中文关键字 */
-    const char * const *phrases;       /* 英文短语（支持空格/下划线/连写） */
-    const char * const *tokens;        /* 英文缩写（单词边界） */
-} field_rule_t;
-
-static const char *const k_sync_cn[] = {"同步头", "同步", NULL};
-static const char *const k_sync_tokens[] = {"fid", "sync", NULL};
-
-static const char *const k_inc_cn[] = {"井斜角", "井斜", "倾角", NULL};
-static const char *const k_inc_phrases[] = {"inclination", "deviation", "static_inc", "continue_inc", NULL};
-static const char *const k_inc_tokens[] = {"inc", NULL};
-
-static const char *const k_azi_cn[] = {"方位角", "方位", NULL};
-static const char *const k_azi_phrases[] = {"azimuth angle", "azimuth", "static_azi", "continue_azi", NULL};
-static const char *const k_azi_tokens[] = {"azi", NULL};
-
-static const char *const k_gtf_cn[] = {"重力工具面", "重力高边角", "重力高边", NULL};
-static const char *const k_gtf_phrases[] = {"gravity tool face", "gravity high side angle", "gravity high side", NULL};
-static const char *const k_gtf_tokens[] = {"gtf", "ghsa", "ghs", NULL};
-
-static const char *const k_mtf_cn[] = {"磁性工具面", "磁工具面", "磁性高边角", "磁高边角", "磁性高边", "磁高边", NULL};
-static const char *const k_mtf_phrases[] = {"magnetic tool face", "magnetic high side angle", "magnetic high side", NULL};
-static const char *const k_mtf_tokens[] = {"mtf", "mhsa", "mhs", NULL};
-
-static const char *const k_tf_cn[] = {"工具面", NULL};
-static const char *const k_tf_phrases[] = {"toolface", "tool face", NULL};
-
-static const field_rule_t k_field_rules[] = {
-    {FIELD_SYNC, 1, "sync", k_sync_cn, NULL, k_sync_tokens},
-    {FIELD_GTF,  0, "gtf",  k_gtf_cn,  k_gtf_phrases, k_gtf_tokens},
-    {FIELD_MTF,  0, "mtf",  k_mtf_cn,  k_mtf_phrases, k_mtf_tokens},
-    {FIELD_TF,   0, "tf",   k_tf_cn,   k_tf_phrases,  NULL},
-    {FIELD_INC,  0, "inc",  k_inc_cn,  k_inc_phrases, k_inc_tokens},
-    {FIELD_AZI,  0, "azi",  k_azi_cn,  k_azi_phrases, k_azi_tokens},
-};
-
-/* 中文关键词匹配 */
-static int contains_any_cn(const char *s, const char * const *list)
-{
-    if (!s || !list) return 0;
-    for (int i = 0; list[i] != NULL; i++) {
-        if (strstr(s, list[i]) != NULL) return 1;
-    }
-    return 0;
-}
-
-/* 英文短语匹配 */
-static int contains_any_phrase(const char *s, const char * const *list)
-{
-    if (!s || !list) return 0;
-    for (int i = 0; list[i] != NULL; i++) {
-        if (contains_phrase_ci(s, list[i])) return 1;
-    }
-    return 0;
-}
-
-/* 英文缩写匹配（单词边界） */
-static int contains_any_token(const char *s, const char * const *list)
-{
-    if (!s || !list) return 0;
-    for (int i = 0; list[i] != NULL; i++) {
-        if (contains_token_ci(s, list[i], 1)) return 1;
-    }
-    return 0;
-}
-
-static int debug_info_changed(const dashboard_debug_info_t *cur, const dashboard_debug_info_t *last)
-{
-    if (!cur || !last) {
-        /* 任意指针为空：认为需要刷新 */
-        return 1;
-    }
-
-    /* 任意关键字段变化都触发刷新，避免无效刷屏 */
-    if (cur->rx_bytes != last->rx_bytes) return 1;
-    if (cur->rx_isr != last->rx_isr) return 1;
-    if (cur->try_cnt != last->try_cnt) return 1;
-    if (cur->frames_ok != last->frames_ok) return 1;
-    if (cur->frames_bad != last->frames_bad) return 1;
-    if (cur->rx_overflow != last->rx_overflow) return 1;
-    if (cur->parse_timeout != last->parse_timeout) return 1;
-    if (cur->drop_no_header != last->drop_no_header) return 1;
-    if (cur->drop_len != last->drop_len) return 1;
-    if (cur->drop_cmd != last->drop_cmd) return 1;
-    if (cur->drop_chk != last->drop_chk) return 1;
-    if (cur->err_ore != last->err_ore) return 1;
-    if (cur->err_fe != last->err_fe) return 1;
-    if (cur->err_ne != last->err_ne) return 1;
-    if (cur->err_pe != last->err_pe) return 1;
-    if (cur->last_len != last->last_len) return 1;
-    if (cur->last_chk != last->last_chk) return 1;
-    if (cur->last_calc != last->last_calc) return 1;
-    if (cur->last_err != last->last_err) return 1;
-    if (cur->last_sub_cmd != last->last_sub_cmd) return 1;
-    if (fabsf(cur->last_value - last->last_value) > 0.001f) return 1;
-    if (strncmp(cur->last_name, last->last_name, sizeof(cur->last_name)) != 0) return 1;
-    if (strncmp(cur->last_raw, last->last_raw, sizeof(cur->last_raw)) != 0) return 1;
-
-    /* 所有字段都一致：无需刷新 */
-    return 0;
-}
 
 /* 生成调试用原始HEX摘要（最多16字节）
  * 用途：当无法定位帧头/校验异常时，直接看到输入流原始字节
@@ -404,26 +190,6 @@ typedef struct {
     field_kind_t kind;
     uint8_t highlight;
 } field_match_t;
-
-static field_match_t match_field_name(const char *name)
-{
-    field_match_t m = {FIELD_NONE, 0};
-    if (!name) return m;
-
-    /* 仅用于“显示名称”的兜底匹配，不参与FID主逻辑 */
-    for (size_t i = 0; i < (sizeof(k_field_rules) / sizeof(k_field_rules[0])); i++) {
-        const field_rule_t *r = &k_field_rules[i];
-        if (contains_any_cn(name, r->cn_keywords) ||
-            contains_any_phrase(name, r->phrases) ||
-            contains_any_token(name, r->tokens)) {
-            m.kind = r->kind;
-            m.highlight = r->highlight;
-            return m;
-        }
-    }
-    /* 未匹配：保持 FIELD_NONE */
-    return m;
-}
 
 /* 按FID直接映射字段（优先使用，避免复杂字符串匹配） */
 static int match_field_by_fid(uint8_t fid, field_match_t *m, const char **name_cn)
@@ -469,40 +235,6 @@ static int match_field_by_fid(uint8_t fid, field_match_t *m, const char **name_c
     return 0;
 }
 
-static const char *field_display_name(field_kind_t kind, const char *raw, char *buf, size_t cap)
-{
-    if (!buf || cap == 0) {
-        return raw ? raw : "";
-    }
-
-    switch (kind) {
-    case FIELD_INC:
-        snprintf(buf, cap, "井斜 Inc");
-        return buf;
-    case FIELD_AZI:
-        snprintf(buf, cap, "方位 Azi");
-        return buf;
-    case FIELD_GTF:
-        snprintf(buf, cap, "重力高边角 GTF");
-        return buf;
-    case FIELD_MTF:
-        snprintf(buf, cap, "磁性高边角 MTF");
-        return buf;
-    case FIELD_TF:
-        snprintf(buf, cap, "工具面 TF");
-        return buf;
-    case FIELD_SYNC:
-        snprintf(buf, cap, "同步头 Sync");
-        return buf;
-    default:
-        break;
-    }
-
-    if (raw && raw[0] != '\0') {
-        return raw;
-    }
-    return "";
-}
 
 /*
  * ============================================================================
@@ -526,146 +258,109 @@ static int sx_try_parse_one(obuf_t *in, sx_frame_t *out)
 {
     const uint8_t header[2] = {0x40, 0x46};
 
-    /* 低速数据链路：减少防护循环次数，降低CPU占用 */
-    for (int guard = 0; guard < 8; guard++) {
-        int off = obuf_find(in, header, sizeof(header));
-        /* 1) 缓冲区内找不到帧头：丢弃旧数据，仅保留末尾1字节 */
-        if (off < 0) {
-            size_t len = obuf_data_len(in);
-            if (len > 1) {
-                obuf_drop(in, len - 1);
-            }
-            g_dbg_info.drop_no_header++;
-            g_dbg_info.last_err = 1;
-            g_dbg_info.last_len = 0;
-            g_dbg_info.last_chk = 0;
-            g_dbg_info.last_calc = 0;
-            dbg_fill_raw_hex(in, 16, g_dbg_info.last_raw, sizeof(g_dbg_info.last_raw));
-            return 0;
+    int off = obuf_find(in, header, sizeof(header));
+    if (off < 0) {
+        size_t len = obuf_data_len(in);
+        if (len > 1) {
+            obuf_drop(in, len - 1);
         }
-
-        /* 2) 若帧头前有噪声，直接丢弃 */
-        if (off > 0) {
-            obuf_drop(in, (size_t)off);
-        }
-
-        /* 3) 长度不足一帧最小值(5B)则等待 */
-        if (obuf_data_len(in) < 5) {
-            return 0;
-        }
-
-        int cmd = obuf_peek(in, 2);
-        int len = obuf_peek(in, 3);
-        if (cmd < 0 || len < 0) {
-            return 0;
-        }
-
-        /* 4) LEN 合法性保护：防止异常长度导致解析卡死 */
-        if ((uint8_t)len == 0 || (uint8_t)len > 200) {
-            g_dbg_info.frames_bad++;
-            g_dbg_info.drop_len++;
-            g_dbg_info.last_err = 1;
-            g_dbg_info.last_len = (uint8_t)len;
-            g_dbg_info.last_chk = 0;
-            g_dbg_info.last_calc = 0;
-            dbg_fill_raw_hex(in, 8, g_dbg_info.last_raw, sizeof(g_dbg_info.last_raw));
-            obuf_drop(in, 1);
-            continue;
-        }
-
-        if ((uint8_t)cmd != 0x09) {
-            /* 5) 只保留新协议 0x09：丢 1 字节继续找头 */
-            g_dbg_info.drop_cmd++;
-            obuf_drop(in, 1);
-            continue;
-        }
-
-        size_t frame_len = (size_t)((uint8_t)len) + 5;
-        /* 6) 数据未到齐：等待后续字节 */
-        if (obuf_data_len(in) < frame_len) {
-            return 0;
-        }
-
-        uint8_t calc = 0;
-        for (size_t i = 0; i < frame_len - 1; i++) {
-            int b = obuf_peek(in, i);
-            if (b < 0) return 0;
-            calc ^= (uint8_t)b;
-        }
-        int chk = obuf_peek(in, frame_len - 1);
-        if (chk < 0) return 0;
-        if ((uint8_t)chk != calc) {
-            /* 7) XOR 校验失败：丢弃1字节继续找头 */
-            g_dbg_info.frames_bad++;
-            g_dbg_info.drop_chk++;
-            g_dbg_info.last_err = 1;
-            g_dbg_info.last_len = (uint8_t)len;
-            g_dbg_info.last_chk = (uint8_t)chk;
-            g_dbg_info.last_calc = calc;
-            dbg_fill_raw_hex(in, frame_len, g_dbg_info.last_raw, sizeof(g_dbg_info.last_raw));
-            obuf_drop(in, 1);
-            continue;
-        }
-
-        g_dbg_info.last_err = 0;
-        g_dbg_info.last_len = (uint8_t)len;
-        g_dbg_info.last_chk = (uint8_t)chk;
-        g_dbg_info.last_calc = calc;
-        g_dbg_info.last_raw[0] = '\0';
-
-        memset(out, 0, sizeof(*out));
-        out->cmd = (uint8_t)cmd;
-
-        out->sub_cmd = (uint8_t)obuf_peek(in, 4);
-
-        /* 8) 根据子命令解析 Payload */
-        if (out->sub_cmd == 0x01 && (uint8_t)len >= 9) {
-            uint8_t fraw[4];
-            for (int i = 0; i < 4; i++) {
-                fraw[i] = (uint8_t)obuf_peek(in, 5 + i);
-            }
-            memcpy(&out->f1, fraw, sizeof(float));
-            for (int i = 0; i < 4; i++) {
-                fraw[i] = (uint8_t)obuf_peek(in, 9 + i);
-            }
-            memcpy(&out->f2, fraw, sizeof(float));
-            out->has_f2 = 1;
-        } else if ((out->sub_cmd == 0x02 || out->sub_cmd == 0x03) && (uint8_t)len >= 6) {
-            out->fid = (uint8_t)obuf_peek(in, 5);
-            out->has_fid = 1;
-
-            uint8_t fraw[4];
-            for (int i = 0; i < 4; i++) {
-                fraw[i] = (uint8_t)obuf_peek(in, 6 + i);
-            }
-            memcpy(&out->f1, fraw, sizeof(float));
-            if (out->sub_cmd == 0x03) {
-                out->auto_close_sec = out->f1;
-            }
-
-            int text_len = (int)((uint8_t)len) - 6;
-            if (text_len > 0) {
-                int cap = (int)sizeof(out->text) - 1;
-                if (text_len > cap) text_len = cap;
-                for (int i = 0; i < text_len; i++) {
-                    int b = obuf_peek(in, 10 + (size_t)i);
-                    out->text[i] = (b < 0) ? '\0' : (char)b;
-                }
-                out->text[text_len] = '\0';
-                out->has_text = 1;
-            }
-        }
-
-        /* 9) 消费整帧数据 */
-        obuf_drop(in, frame_len);
-        /* 调试：成功解析帧计数 */
-        g_dbg_info.frames_ok++;
-            g_last_frame_ms = HAL_GetTick();
-        return 1;
+        g_dbg_info.drop_no_header++;
+        return 0;
     }
-    /* 防御性退出：避免在极端情况下卡在解析循环 */
-    obuf_drop(in, 1);
-    return 0;
+
+    if (off > 0) {
+        obuf_drop(in, (size_t)off);
+    }
+
+    if (obuf_data_len(in) < 5) {
+        return 0;
+    }
+
+    int cmd = obuf_peek(in, 2);
+    int len = obuf_peek(in, 3);
+    if (cmd < 0 || len < 0) {
+        return 0;
+    }
+
+    if ((uint8_t)cmd != 0x09) {
+        g_dbg_info.drop_cmd++;
+        obuf_drop(in, 1);
+        return 0;
+    }
+
+    if ((uint8_t)len == 0 || (uint8_t)len > 200) {
+        g_dbg_info.frames_bad++;
+        g_dbg_info.drop_len++;
+        obuf_drop(in, 1);
+        return 0;
+    }
+
+    size_t frame_len = (size_t)((uint8_t)len) + 5;
+    if (obuf_data_len(in) < frame_len) {
+        return 0;
+    }
+
+    /* XOR 校验（保留，但不做额外的调试填充） */
+    uint8_t calc = 0;
+    for (size_t i = 0; i < frame_len - 1; i++) {
+        int b = obuf_peek(in, i);
+        if (b < 0) return 0;
+        calc ^= (uint8_t)b;
+    }
+    int chk = obuf_peek(in, frame_len - 1);
+    if (chk < 0) return 0;
+    if ((uint8_t)chk != calc) {
+        g_dbg_info.frames_bad++;
+        g_dbg_info.drop_chk++;
+        obuf_drop(in, 1);
+        return 0;
+    }
+
+    memset(out, 0, sizeof(*out));
+    out->cmd = (uint8_t)cmd;
+    out->sub_cmd = (uint8_t)obuf_peek(in, 4);
+
+    if (out->sub_cmd == 0x01 && (uint8_t)len >= 9) {
+        uint8_t fraw[4];
+        for (int i = 0; i < 4; i++) {
+            fraw[i] = (uint8_t)obuf_peek(in, 5 + i);
+        }
+        memcpy(&out->f1, fraw, sizeof(float));
+        for (int i = 0; i < 4; i++) {
+            fraw[i] = (uint8_t)obuf_peek(in, 9 + i);
+        }
+        memcpy(&out->f2, fraw, sizeof(float));
+        out->has_f2 = 1;
+    } else if ((out->sub_cmd == 0x02 || out->sub_cmd == 0x03) && (uint8_t)len >= 6) {
+        out->fid = (uint8_t)obuf_peek(in, 5);
+        out->has_fid = 1;
+
+        uint8_t fraw[4];
+        for (int i = 0; i < 4; i++) {
+            fraw[i] = (uint8_t)obuf_peek(in, 6 + i);
+        }
+        memcpy(&out->f1, fraw, sizeof(float));
+        if (out->sub_cmd == 0x03) {
+            out->auto_close_sec = out->f1;
+        }
+
+        int text_len = (int)((uint8_t)len) - 6;
+        if (text_len > 0) {
+            int cap = (int)sizeof(out->text) - 1;
+            if (text_len > cap) text_len = cap;
+            for (int i = 0; i < text_len; i++) {
+                int b = obuf_peek(in, 10 + (size_t)i);
+                out->text[i] = (b < 0) ? '\0' : (char)b;
+            }
+            out->text[text_len] = '\0';
+            out->has_text = 1;
+        }
+    }
+
+    obuf_drop(in, frame_len);
+    g_dbg_info.frames_ok++;
+    g_last_frame_ms = HAL_GetTick();
+    return 1;
 }
 #endif
 
@@ -704,7 +399,7 @@ int main(void)
         {
             static uint32_t last_lvgl_tick = 0;
             uint32_t now = lv_tick_get();
-            if ((now - last_lvgl_tick) >= 100) {
+            if ((now - last_lvgl_tick) >= 200) {
                 last_lvgl_tick = now;
                 lv_timer_handler();
             }
@@ -720,7 +415,7 @@ int main(void)
          * [优化]: 改为 while 循环，尽可能多地通过本轮循环消化缓冲区积压的数据。
          * 限制单次最大处理 50 包，防止数据量过大导致 UI 线程被饿死 (Watchdog 超时或界面卡顿)。
          */
-        while (process_cnt < 50 && sx_try_parse_one(&g_rx_buf, &frame))
+        while (process_cnt < 100 && sx_try_parse_one(&g_rx_buf, &frame))
         {
             process_cnt++;
 
@@ -829,61 +524,24 @@ int main(void)
          * 避免了每解一包就重绘一次 UI 的巨大开销。
          */
         if (process_cnt > 0) {
-            g_dbg_info.rx_isr = g_uart_isr_cnt;
-            g_dbg_info.err_ore = g_uart_err_ore;
-            g_dbg_info.err_fe = g_uart_err_fe;
-            g_dbg_info.err_ne = g_uart_err_ne;
-            g_dbg_info.err_pe = g_uart_err_pe;
-            g_dbg_info.rx_overflow = (uint32_t)g_rx_buf.dropped;
-            g_dbg_info.buf_len = (uint32_t)obuf_data_len(&g_rx_buf);
-            g_dbg_info.parse_timeout = g_parse_timeout_cnt;
+            g_ui_dirty = 1;
+        }
 
-            /* 仅当数据有变化时刷新主界面，降低CPU负担 */
-            uint8_t need_update = 0;
-            if (!g_last_metrics_valid) {
-                need_update = 1;
-            } else {
-                const float eps = 0.01f;
-                if (fabsf(g_metrics.inclination - g_last_metrics.inclination) > eps) need_update = 1;
-                if (fabsf(g_metrics.azimuth - g_last_metrics.azimuth) > eps) need_update = 1;
-                if (fabsf(g_metrics.toolface - g_last_metrics.toolface) > eps) need_update = 1;
-                if (fabsf(g_metrics.pump_pressure - g_last_metrics.pump_pressure) > eps) need_update = 1;
-                if (g_metrics.pump_status != g_last_metrics.pump_status) need_update = 1;
-                if (g_metrics.port_connected != g_last_metrics.port_connected) need_update = 1;
-                if (g_metrics.tf_type != g_last_metrics.tf_type) need_update = 1;
-                if (strncmp(g_metrics.port_name, g_last_metrics.port_name, sizeof(g_metrics.port_name)) != 0) need_update = 1;
-                for (int i = 0; i < 5; i++) {
-                    if (fabsf(g_metrics.toolface_history[i] - g_last_metrics.toolface_history[i]) > eps) {
-                        need_update = 1;
-                        break;
-                    }
-                }
-            }
-
-            if (need_update) {
-                dashboard_update(&g_metrics);
-                g_last_metrics = g_metrics;
-                g_last_metrics_valid = 1;
-            }
-            {
-                uint32_t now = lv_tick_get();
-                const uint32_t interval = 1000;
-                uint8_t changed = (!g_last_dbg_valid) || debug_info_changed(&g_dbg_info, &g_last_dbg_info);
-                if (changed && (now - g_last_dbg_tick) >= interval) {
-                    dashboard_debug_update(&g_dbg_info);
-                    g_last_dbg_info = g_dbg_info;
-                    g_last_dbg_valid = 1;
-                    g_last_dbg_tick = now;
-                }
+        /* 通信超时判断：10秒内无新数据则提示超时 */
+        {
+            uint32_t now = HAL_GetTick();
+            uint8_t alive = (g_comm_last_rx_ms != 0U && (now - g_comm_last_rx_ms) < 10000U) ? 1 : 0;
+            if (g_metrics.comm_alive != alive) {
+                g_metrics.comm_alive = alive;
+                g_ui_dirty = 1;
             }
         }
 
-        /* 即使未解析到帧，也低频刷新调试面板（仅变化时刷新） */
+        /* 低频刷新调试面板 */
         {
-            static uint32_t last_dbg_tick = 0;
             uint32_t now = lv_tick_get();
-            if ((now - last_dbg_tick) >= 1000) {
-                last_dbg_tick = now;
+            if ((now - g_last_dbg_tick) >= 1000) {
+                g_last_dbg_tick = now;
                 g_dbg_info.rx_isr = g_uart_isr_cnt;
                 g_dbg_info.err_ore = g_uart_err_ore;
                 g_dbg_info.err_fe = g_uart_err_fe;
@@ -892,44 +550,18 @@ int main(void)
                 g_dbg_info.rx_overflow = (uint32_t)g_rx_buf.dropped;
                 g_dbg_info.buf_len = (uint32_t)obuf_data_len(&g_rx_buf);
                 g_dbg_info.parse_timeout = g_parse_timeout_cnt;
-                {
-                    const uint32_t interval = 1000;
-                    uint8_t changed = (!g_last_dbg_valid) || debug_info_changed(&g_dbg_info, &g_last_dbg_info);
-                    if (changed && (now - g_last_dbg_tick) >= interval) {
-                        dashboard_debug_update(&g_dbg_info);
-                        g_last_dbg_info = g_dbg_info;
-                        g_last_dbg_valid = 1;
-                        g_last_dbg_tick = now;
-                    }
-                }
+                dashboard_debug_update(&g_dbg_info);
             }
         }
 
-        /* 解析空闲保护：若长时间未收到新字节且缓冲区仍有残留，则清空并计数 */
-        {
-            uint32_t now = HAL_GetTick();
-            if (obuf_data_len(&g_rx_buf) > 0 && g_last_rx_byte_ms > 0) {
-                if ((now - g_last_rx_byte_ms) > 1000) {
-                    obuf_clear(&g_rx_buf);
-                    g_parse_timeout_cnt++;
-                }
-            }
-        }
-
-
-        /* 串口接收看门狗：长时间无中断则重挂接收，防止接收停止 */
+        /* 串口接收看门狗：长时间无中断则重挂接收 */
         {
             static uint32_t last_isr = 0;
             static uint32_t last_isr_tick = 0;
             uint32_t now = lv_tick_get();
-            if ((now - last_isr_tick) >= 1000) {
+            if ((now - last_isr_tick) >= 2000) {
                 if (g_uart_isr_cnt == last_isr) {
-                    HAL_UART_AbortReceive(&g_uart1_handle);
-                    if (HAL_UART_Receive_IT(&g_uart1_handle, (uint8_t *)g_rx_buffer, RXBUFFERSIZE) != HAL_OK) {
-                        /* 若重挂接收失败，进行UART重初始化，防止卡死 */
-                        HAL_UART_DeInit(&g_uart1_handle);
-                        usart_init(UART_DEFAULT_BAUDRATE);
-                    }
+                    HAL_UART_Receive_IT(&g_uart1_handle, (uint8_t *)g_rx_buffer, RXBUFFERSIZE);
                 } else {
                     last_isr = g_uart_isr_cnt;
                 }
@@ -944,15 +576,23 @@ int main(void)
                 g_metrics.port_connected = 0;
                 obuf_clear(&g_rx_buf);
                 g_last_frame_ms = 0;
+                g_ui_dirty = 1;
             }
         }
 #endif
+
+        if (g_ui_dirty) {
+            if (!dashboard_message_is_active()) {
+                dashboard_update(&g_metrics);
+                g_ui_dirty = 0;
+            }
+        }
 
         /* 主循环心跳：500ms 翻转 LED0，便于观察是否卡死 */
         {
             static uint32_t last_hb_tick = 0;
             uint32_t now = lv_tick_get();
-            if ((now - last_hb_tick) >= 500) {
+            if ((now - last_hb_tick) >= 1000) {
                 last_hb_tick = now;
                 LED0_TOGGLE();
             }

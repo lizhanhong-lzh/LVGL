@@ -1,7 +1,5 @@
 #include "app.h"
 #include "screens/dashboard.h"
-#include <string.h>
-#include <math.h> 
 
 /*
  * 【模块说明 / Module Description】
@@ -14,12 +12,6 @@
  *    - 包含: app_stop_sim() 用于在检测到真实数据时停止模拟。
  *    - 注意: 当前版本中，模拟定时器已被注释掉，以便显示真实串口数据。
  */
-
-// 模拟数据缓存对象 (仅在模拟模式下使用)
-static plant_metrics_t g_sim;
-
-// 定时器回调声明
-static void sim_timer_cb(lv_timer_t *t);
 
 // ============================================================================
 // 应用初始化函数
@@ -55,26 +47,7 @@ void app_stop_sim(void)
     // 目前逻辑是默认不启动，所以为空。
 }
 
-/* 
- * ============================================================================
- * 模拟数据生成器回调 (已废弃/保留参考)
- * ============================================================================
- * 
- * static void sim_timer_cb(lv_timer_t *t)
- * {
- *     (void)t;
- *     static uint32_t tick = 0;
- *     tick++;
- *     
- *     // 模拟各传感器数据波动 ...
- *     g_sim.toolface = (float)((tick * 45) % 360);
- *     g_sim.pump_pressure = 15.0f + ((tick % 10) * 0.1f);
- *     
- *     // 刷新界面
- *     dashboard_update(&g_sim);
- * }
+/*
+ * 模拟数据生成器已移除（仅保留真实串口数据路径）。
  */
-
-/* 占位空函数，防止编译器报错 (Unused function warning) */
-static void sim_timer_cb(lv_timer_t *t) { (void)t; }
 

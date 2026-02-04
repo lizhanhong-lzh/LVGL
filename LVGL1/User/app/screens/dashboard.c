@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h> // for rand()
+#include <string.h>
+
+#define DASHBOARD_ENABLE_DEBUG 0
 
 /*
  * =========================================================================================
@@ -67,6 +70,7 @@ typedef enum {
 // 保存界面中需要动态更新的 LVGL 对象指针
 // ---------------------------------------------------------
 typedef struct {
+    lv_obj_t *root;
     // 左侧：仪表盘 (5个同心圆弧)
     // arcs[0]是内圈(历史), arcs[4]是外圈(最新)
     lv_obj_t *arcs[5]; 
@@ -83,7 +87,10 @@ typedef struct {
     lv_obj_t *table_decode;   // 解码数据表 (Table Object)
     
     // 顶部状态栏
-    lv_obj_t *label_comm_info; // 通讯信息 Label (如 "COM1 通信中")
+    lv_obj_t *label_comm_info; // 通讯信息 Label (如 "COM1 连接")
+
+    // 解码表下方通信状态
+    lv_obj_t *label_comm_status;
 
     // 消息区域（固定右下角）
     lv_obj_t *msg_cont;
@@ -102,8 +109,60 @@ typedef struct {
 
 // 全局 UI 实例，用于在 update 函数中访问对象
 static dashboard_ui_t g_ui;
-static const uint32_t k_decode_rows = 15;
-static uint32_t g_decode_row = 0;
+static const uint32_t k_decode_rows = 16;
+static char g_msg_text[256];
+static const uint16_t k_msg_line_chars = 18;
+static uint8_t g_msg_active = 0;
+
+static size_t utf8_char_len(unsigned char c)
+{
+    if (c < 0x80) return 1;
+    if ((c & 0xE0) == 0xC0) return 2;
+    if ((c & 0xF0) == 0xE0) return 3;
+    if ((c & 0xF8) == 0xF0) return 4;
+    return 1;
+}
+
+static void build_two_line_msg(const char *text)
+{
+    size_t out = 0;
+    int line = 0;
+    uint16_t chars = 0;
+    const char *p = text;
+
+    while (*p && line < 2) {
+        if (*p == '\n') {
+            if (line == 0 && out + 1 < sizeof(g_msg_text)) {
+                g_msg_text[out++] = '\n';
+                line++;
+                chars = 0;
+            }
+            p++;
+            continue;
+        }
+
+        if (chars >= k_msg_line_chars) {
+            if (line == 0 && out + 1 < sizeof(g_msg_text)) {
+                g_msg_text[out++] = '\n';
+                line++;
+                chars = 0;
+                continue;
+            }
+            break;
+        }
+
+        size_t clen = utf8_char_len((unsigned char)*p);
+        if (out + clen >= sizeof(g_msg_text)) {
+            break;
+        }
+        for (size_t i = 0; i < clen; i++) {
+            g_msg_text[out++] = *p++;
+        }
+        chars++;
+    }
+
+    g_msg_text[out] = '\0';
+}
 
 /* 使用整数拼接小数，避免浮点 printf 在嵌入式环境显示异常
  * 说明：部分工具链未开启浮点 printf，导致小数点丢失/数值放大
@@ -126,6 +185,21 @@ static void format_fixed(char *buf, size_t cap, float v, int decimals)
     } else {
         snprintf(buf, cap, sign ? "-%d.%02d" : "%d.%02d", ip, fp);
     }
+}
+
+/* 生成“运行时刻”字符串（HH:MM:SS）
+ * 说明：无 RTC 时用系统运行时间代替当前时间
+ */
+static void format_uptime(char *buf, size_t cap)
+{
+    uint32_t sec = lv_tick_get() / 1000U;
+    uint32_t hh = (sec / 3600U) % 24U;
+    uint32_t mm = (sec / 60U) % 60U;
+    uint32_t ss = sec % 60U;
+    snprintf(buf, cap, "%02lu:%02lu:%02lu",
+             (unsigned long)hh,
+             (unsigned long)mm,
+             (unsigned long)ss);
 }
 
 // ---------------------------------------------------------
@@ -262,16 +336,37 @@ lv_obj_t *dashboard_create(void)
 {
     // 1. 创建根页面 (Root Screen)
     lv_obj_t *scr = lv_obj_create(NULL);
+    g_ui.root = scr;
     lv_obj_set_style_bg_color(scr, lv_color_white(), 0); // 设置背景为白色
     lv_obj_set_style_pad_all(scr, 5, 0); // 全局 5px 内边距
     lv_obj_set_flex_flow(scr, LV_FLEX_FLOW_ROW); // 设置为水平布局 (左右分栏)
     lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE); // 根页面禁止滚动
 
+    // 顶部左侧信息区（SQMWD + 串口状态）
+    lv_obj_t *info_cont = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(info_cont, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(info_cont, 0, 0);
+    lv_obj_set_style_border_width(info_cont, 0, 0);
+    lv_obj_set_style_pad_all(info_cont, 0, 0);
+    lv_obj_clear_flag(info_cont, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_flex_flow(info_cont, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(info_cont, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_align(info_cont, LV_ALIGN_TOP_LEFT, 5, 5);
+
+    lv_obj_t *lbl_title = lv_label_create(info_cont);
+    lv_label_set_text(lbl_title, "SQMWD");
+    lv_obj_set_style_text_font(lbl_title, &my_font_30, 0);
+
+    g_ui.label_comm_info = lv_label_create(info_cont);
+    lv_label_set_text(g_ui.label_comm_info, "COM.. --");
+    lv_obj_set_style_text_font(g_ui.label_comm_info, &my_font_30, 0);
+    lv_obj_set_style_text_color(g_ui.label_comm_info, lv_color_hex(0x666666), 0);
+
     // 2. 左侧：仪表盘区域 (Left Panel)
     lv_obj_t *left_panel = lv_obj_create(scr);
     lv_obj_set_size(left_panel, LV_PCT(55), LV_PCT(100)); // 宽度占 55%，高度占满
     lv_obj_set_style_border_width(left_panel, 0, 0);      // 无边框
-    lv_obj_clear_flag(left_panel, LV_OBJ_FLAG_SCROLLABLE); // 禁止滚动
+    lv_obj_clear_flag(left_panel, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_flex_flow(left_panel, LV_FLEX_FLOW_COLUMN); // 内部垂直居中
     lv_obj_set_flex_align(left_panel, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
@@ -283,7 +378,7 @@ lv_obj_t *dashboard_create(void)
     lv_obj_set_size(right_panel, LV_PCT(45), LV_PCT(100)); // 宽度占 45%
     lv_obj_set_style_border_width(right_panel, 0, 0); // 无边框
     lv_obj_set_style_pad_all(right_panel, 4, 0); // 少量内边距
-    lv_obj_clear_flag(right_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(right_panel, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_flex_flow(right_panel, LV_FLEX_FLOW_COLUMN); // 内部垂直布局 (上:列表, 下:表格)
     
     // 3.1 数据列表区 (Top Data List) - 显示实时值
@@ -293,28 +388,9 @@ lv_obj_t *dashboard_create(void)
     lv_obj_set_style_border_width(data_list_cont, 1, 0); // 外框细线
     lv_obj_set_style_border_color(data_list_cont, lv_color_hex(0xCCCCCC), 0);
     lv_obj_set_style_pad_all(data_list_cont, 5, 0);
-    lv_obj_clear_flag(data_list_cont, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(data_list_cont, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_flex_flow(data_list_cont, LV_FLEX_FLOW_COLUMN); // 垂直排列
 
-    // 3.1.1 标题行/通讯状态栏
-    lv_obj_t *header_row = lv_obj_create(data_list_cont);
-    lv_obj_set_size(header_row, LV_PCT(100), 30); // 固定高度
-    lv_obj_set_style_border_width(header_row, 0, 0);
-    lv_obj_set_style_bg_opa(header_row, 0, 0);
-    lv_obj_set_flex_flow(header_row, LV_FLEX_FLOW_ROW); // 水平两端对齐
-    lv_obj_set_flex_align(header_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    
-    // 左上角标题
-    lv_obj_t *lbl_title = lv_label_create(header_row);
-    lv_label_set_text(lbl_title, "SQMWD");
-    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_12, 0);
-    
-    // 右上角通讯状态 Label
-    g_ui.label_comm_info = lv_label_create(header_row);
-    lv_label_set_text(g_ui.label_comm_info, "COM.. --"); // 初始
-    lv_obj_set_style_text_font(g_ui.label_comm_info, &my_font_30, 0); 
-    lv_obj_set_style_text_color(g_ui.label_comm_info, lv_color_hex(0x666666), 0);
-    
     // 3.1.2 创建各项数据行
     // 使用 create_data_row 辅助函数批量创建
     create_data_row(data_list_cont, "井斜 Inc", &g_ui.label_inc); 
@@ -336,17 +412,20 @@ lv_obj_t *dashboard_create(void)
     lv_obj_set_style_border_width(table_header, 0, 0);
     lv_obj_set_style_radius(table_header, 0, 0);
     lv_obj_set_style_bg_opa(table_header, LV_OPA_TRANSP, 0);
+    lv_obj_clear_flag(table_header, LV_OBJ_FLAG_CLICKABLE);
     
     // 设置表头中文字体
     lv_obj_set_style_text_font(table_header, &my_font_30, LV_PART_ITEMS);
-    // 配置列宽 (共3列)
-    lv_table_set_col_cnt(table_header, 2);
-    lv_table_set_col_width(table_header, 0, 190); // 参数
-    lv_table_set_col_width(table_header, 1, 190); // 解码值
+    // 配置列宽 (共3列：参数 / 解码值 / 时间)
+    lv_table_set_col_cnt(table_header, 3);
+    lv_table_set_col_width(table_header, 0, 140); // 参数
+    lv_table_set_col_width(table_header, 1, 120); // 解码值
+    lv_table_set_col_width(table_header, 2, 140); // 时间
     lv_obj_set_style_pad_all(table_header, 4, LV_PART_ITEMS);
     // 填充表头文本
     lv_table_set_cell_value(table_header, 0, 0, "参数");
     lv_table_set_cell_value(table_header, 0, 1, "解码值");
+    lv_table_set_cell_value(table_header, 0, 2, "时间");
 
     // 3.2.2 数据列表容器 (可滚动)
     g_ui.table_cont = lv_obj_create(right_panel);
@@ -355,12 +434,15 @@ lv_obj_t *dashboard_create(void)
     lv_obj_set_style_pad_all(g_ui.table_cont, 0, 0);
     lv_obj_set_style_border_width(g_ui.table_cont, 1, 0);
     lv_obj_set_style_border_color(g_ui.table_cont, lv_color_hex(0xCCCCCC), 0);
-    lv_obj_add_flag(g_ui.table_cont, LV_OBJ_FLAG_SCROLLABLE); // 允许滚动
+    lv_obj_clear_flag(g_ui.table_cont, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(g_ui.table_cont, LV_SCROLLBAR_MODE_OFF);
 
     // 3.2.3 实际数据表格
     // 说明：使用中文字体展示参数名称；数值显示走 format_fixed，避免小数点异常
     g_ui.table_decode = lv_table_create(g_ui.table_cont);
     lv_obj_set_width(g_ui.table_decode, LV_PCT(100)); 
+    lv_obj_clear_flag(g_ui.table_decode, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_scrollbar_mode(g_ui.table_decode, LV_SCROLLBAR_MODE_OFF);
     
     // 设置表格内容字体
     lv_obj_set_style_text_font(g_ui.table_decode, &my_font_16, LV_PART_ITEMS);
@@ -371,38 +453,63 @@ lv_obj_t *dashboard_create(void)
     lv_obj_set_style_text_color(g_ui.table_decode, lv_color_black(), LV_PART_ITEMS | LV_STATE_USER_1);
 
     // 配置列宽 (必须与表头一致)
-    lv_table_set_col_cnt(g_ui.table_decode, 2);
-    lv_table_set_col_width(g_ui.table_decode, 0, 190); 
-    lv_table_set_col_width(g_ui.table_decode, 1, 190); 
+    lv_table_set_col_cnt(g_ui.table_decode, 3);
+    lv_table_set_col_width(g_ui.table_decode, 0, 140); 
+    lv_table_set_col_width(g_ui.table_decode, 1, 120); 
+    lv_table_set_col_width(g_ui.table_decode, 2, 140); 
     lv_obj_set_style_pad_all(g_ui.table_decode, 4, LV_PART_ITEMS);  
 
     lv_table_set_row_cnt(g_ui.table_decode, k_decode_rows);
     for (uint32_t r = 0; r < k_decode_rows; r++) {
         lv_table_set_cell_value(g_ui.table_decode, r, 0, "");
         lv_table_set_cell_value(g_ui.table_decode, r, 1, "");
+        lv_table_set_cell_value(g_ui.table_decode, r, 2, "");
+    }
+
+    // 3.3 解码表下方通信状态条
+    {
+        lv_obj_t *comm_cont = lv_obj_create(right_panel);
+        lv_obj_set_width(comm_cont, LV_PCT(100));
+        lv_obj_set_height(comm_cont, 32);
+        lv_obj_set_style_border_width(comm_cont, 1, 0);
+        lv_obj_set_style_border_color(comm_cont, lv_color_hex(0xCCCCCC), 0);
+        lv_obj_set_style_pad_all(comm_cont, 4, 0);
+        lv_obj_set_style_bg_opa(comm_cont, 0, 0);
+        lv_obj_clear_flag(comm_cont, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
+        g_ui.label_comm_status = lv_label_create(comm_cont);
+        lv_label_set_text(g_ui.label_comm_status, "通讯超时");
+        lv_obj_set_style_text_font(g_ui.label_comm_status, &my_font_30, 0);
+        lv_obj_set_style_text_color(g_ui.label_comm_status, lv_color_hex(0xB22222), 0);
+        lv_obj_align(g_ui.label_comm_status, LV_ALIGN_LEFT_MID, 6, 0);
     }
 
     // 4. 固定消息区域（右下角，置于顶层不遮挡主布局）
     g_ui.msg_cont = lv_obj_create(lv_layer_top());
-    lv_obj_set_size(g_ui.msg_cont, 320, 120);
+    lv_obj_set_size(g_ui.msg_cont, LV_PCT(50), LV_PCT(40));
     lv_obj_set_style_bg_color(g_ui.msg_cont, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(g_ui.msg_cont, LV_OPA_70, 0);
+    lv_obj_set_style_bg_opa(g_ui.msg_cont, LV_OPA_40, 0);
+    lv_obj_set_style_anim_time(g_ui.msg_cont, 0, 0);
     lv_obj_set_style_border_width(g_ui.msg_cont, 1, 0);
     lv_obj_set_style_border_color(g_ui.msg_cont, lv_color_hex(0x666666), 0);
-    lv_obj_set_style_pad_all(g_ui.msg_cont, 6, 0);
-    lv_obj_set_style_radius(g_ui.msg_cont, 6, 0);
-    lv_obj_align(g_ui.msg_cont, LV_ALIGN_BOTTOM_LEFT, 6, -6);
+    lv_obj_set_style_pad_all(g_ui.msg_cont, 8, 0);
+    lv_obj_set_style_radius(g_ui.msg_cont, 8, 0);
+    lv_obj_align(g_ui.msg_cont, LV_ALIGN_LEFT_MID, 10, 0);
+    lv_obj_clear_flag(g_ui.msg_cont, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(g_ui.msg_cont, LV_OBJ_FLAG_HIDDEN);
 
-    g_ui.msg_label = lv_label_create(g_ui.msg_cont);
-    lv_label_set_long_mode(g_ui.msg_label, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(g_ui.msg_label, LV_PCT(100));
+    g_ui.msg_label = lv_label_create(lv_layer_top());
+    lv_label_set_long_mode(g_ui.msg_label, LV_LABEL_LONG_CLIP);
+    lv_obj_set_width(g_ui.msg_label, LV_PCT(45));
     lv_label_set_text(g_ui.msg_label, "");
     lv_obj_set_style_text_color(g_ui.msg_label, lv_color_white(), 0);
-    lv_obj_set_style_text_font(g_ui.msg_label, &my_font_16, 0);
+    lv_obj_set_style_text_font(g_ui.msg_label, &my_font_30, 0);
     lv_obj_set_style_text_align(g_ui.msg_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_center(g_ui.msg_label);
+    lv_obj_align_to(g_ui.msg_label, g_ui.msg_cont, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_clear_flag(g_ui.msg_label, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(g_ui.msg_label, LV_OBJ_FLAG_HIDDEN);
 
+#if DASHBOARD_ENABLE_DEBUG
     // 5. 调试小部件（悬浮，不影响主布局）
     g_ui.dbg_cont = lv_obj_create(lv_layer_top());
     lv_obj_set_size(g_ui.dbg_cont, 360, 130);
@@ -437,6 +544,7 @@ lv_obj_t *dashboard_create(void)
     lv_obj_align(g_ui.dbg_line3, LV_ALIGN_TOP_LEFT, 0, 44);
     lv_obj_align(g_ui.dbg_line4, LV_ALIGN_TOP_LEFT, 0, 66);
     lv_obj_align(g_ui.dbg_line5, LV_ALIGN_TOP_LEFT, 0, 88);
+#endif
     
     return scr;
 }
@@ -479,16 +587,36 @@ void dashboard_update(const plant_metrics_t *data)
     }
 
     // 更新通讯状态（连接/断开状态提示）
+    const char *com_id = "COM?";
+    if (strncmp(data->port_name, "UART1", 5) == 0) {
+        com_id = "COM1";
+    } else if (strncmp(data->port_name, "UART2", 5) == 0) {
+        com_id = "COM2";
+    } else if (strncmp(data->port_name, "UART3", 5) == 0) {
+        com_id = "COM3";
+    }
+
     if (data->port_connected) {
-        // e.g. "COM1 通信中"
-        snprintf(buf, sizeof(buf), "%s 通信中", data->port_name); 
+        // e.g. "COM2 通信中"
+        snprintf(buf, sizeof(buf), "%s 通信中", com_id);
         lv_obj_set_style_text_color(g_ui.label_comm_info, lv_color_hex(0x228B22), 0); // 森林绿
     } else {
-        // e.g. "COM 无信号"
-        snprintf(buf, sizeof(buf), "%s 无信号", data->port_name[0] ? data->port_name : "COM"); 
+        // e.g. "COM2 无信号"
+        snprintf(buf, sizeof(buf), "%s 无信号", com_id);
         lv_obj_set_style_text_color(g_ui.label_comm_info, lv_color_hex(0xB22222), 0); // 火砖红
     }
     lv_label_set_text(g_ui.label_comm_info, buf);
+
+    // 更新解码表下方通信状态（10秒内有数据增长）
+    if (g_ui.label_comm_status) {
+        if (data->comm_alive && data->port_connected) {
+            lv_label_set_text(g_ui.label_comm_status, "通信正常");
+            lv_obj_set_style_text_color(g_ui.label_comm_status, lv_color_hex(0x228B22), 0);
+        } else {
+            lv_label_set_text(g_ui.label_comm_status, "通信超时");
+            lv_obj_set_style_text_color(g_ui.label_comm_status, lv_color_hex(0xB22222), 0);
+        }
+    }
 
 
     // 2. 更新仪表盘 (Toolface Dial)
@@ -526,23 +654,37 @@ void dashboard_append_decode_row(const char *name, float value, int highlight)
         return;
     }
 
-    uint32_t new_row = g_decode_row % k_decode_rows;
-    g_decode_row++;
+    /* 旧数据上移一行，最后一行写入新数据 */
+    for (uint32_t r = 0; r + 1 < k_decode_rows; r++) {
+        for (int col = 0; col < 3; col++) {
+            const char *v = lv_table_get_cell_value(g_ui.table_decode, r + 1, col);
+            lv_table_set_cell_value(g_ui.table_decode, r, col, v ? v : "");
 
+            if (lv_table_has_cell_ctrl(g_ui.table_decode, r + 1, col, LV_TABLE_CELL_CTRL_CUSTOM_1)) {
+                lv_table_add_cell_ctrl(g_ui.table_decode, r, col, LV_TABLE_CELL_CTRL_CUSTOM_1);
+            } else {
+                lv_table_clear_cell_ctrl(g_ui.table_decode, r, col, LV_TABLE_CELL_CTRL_CUSTOM_1);
+            }
+        }
+    }
+
+    uint32_t new_row = k_decode_rows - 1;
     char val_str[24];
+    char tbuf[16];
     format_fixed(val_str, sizeof(val_str), value, 2);
-
+    format_uptime(tbuf, sizeof(tbuf));
     lv_table_set_cell_value(g_ui.table_decode, new_row, 0, name);
     lv_table_set_cell_value(g_ui.table_decode, new_row, 1, val_str);
+    lv_table_set_cell_value(g_ui.table_decode, new_row, 2, tbuf);
 
     /* 清除上一轮可能遗留的高亮标记 */
-    for (int col = 0; col < 2; col++) {
+    for (int col = 0; col < 3; col++) {
         lv_table_clear_cell_ctrl(g_ui.table_decode, new_row, col, LV_TABLE_CELL_CTRL_CUSTOM_1);
     }
 
     /* 需要高亮时再加标记（同步头等场景） */
     if (highlight) {
-        for (int col = 0; col < 2; col++) {
+        for (int col = 0; col < 3; col++) {
             lv_table_add_cell_ctrl(g_ui.table_decode, new_row, col, LV_TABLE_CELL_CTRL_CUSTOM_1);
         }
     }
@@ -558,18 +700,33 @@ void dashboard_append_decode_text_row(const char *name, const char *value_text, 
         return;
     }
 
-    uint32_t new_row = g_decode_row % k_decode_rows;
-    g_decode_row++;
+    /* 旧数据上移一行，最后一行写入新数据 */
+    for (uint32_t r = 0; r + 1 < k_decode_rows; r++) {
+        for (int col = 0; col < 3; col++) {
+            const char *v = lv_table_get_cell_value(g_ui.table_decode, r + 1, col);
+            lv_table_set_cell_value(g_ui.table_decode, r, col, v ? v : "");
 
+            if (lv_table_has_cell_ctrl(g_ui.table_decode, r + 1, col, LV_TABLE_CELL_CTRL_CUSTOM_1)) {
+                lv_table_add_cell_ctrl(g_ui.table_decode, r, col, LV_TABLE_CELL_CTRL_CUSTOM_1);
+            } else {
+                lv_table_clear_cell_ctrl(g_ui.table_decode, r, col, LV_TABLE_CELL_CTRL_CUSTOM_1);
+            }
+        }
+    }
+
+    uint32_t new_row = k_decode_rows - 1;
+    char tbuf[16];
+    format_uptime(tbuf, sizeof(tbuf));
     lv_table_set_cell_value(g_ui.table_decode, new_row, 0, name);
     lv_table_set_cell_value(g_ui.table_decode, new_row, 1, value_text);
+    lv_table_set_cell_value(g_ui.table_decode, new_row, 2, tbuf);
 
-    for (int col = 0; col < 2; col++) {
+    for (int col = 0; col < 3; col++) {
         lv_table_clear_cell_ctrl(g_ui.table_decode, new_row, col, LV_TABLE_CELL_CTRL_CUSTOM_1);
     }
 
     if (highlight) {
-        for (int col = 0; col < 2; col++) {
+        for (int col = 0; col < 3; col++) {
             lv_table_add_cell_ctrl(g_ui.table_decode, new_row, col, LV_TABLE_CELL_CTRL_CUSTOM_1);
         }
     }
@@ -588,6 +745,10 @@ static void msg_close_cb(lv_event_t *e)
     if (g_ui.msg_cont) {
         lv_obj_add_flag(g_ui.msg_cont, LV_OBJ_FLAG_HIDDEN);
     }
+    if (g_ui.msg_label) {
+        lv_obj_add_flag(g_ui.msg_label, LV_OBJ_FLAG_HIDDEN);
+    }
+    g_msg_active = 0;
 }
 
 static void msg_timer_cb(lv_timer_t *t)
@@ -604,8 +765,11 @@ void dashboard_show_message(const char *text, uint32_t auto_close_ms)
 
     // 固定右下角消息区域：更新文本并显示
     if (g_ui.msg_label && g_ui.msg_cont) {
-        lv_label_set_text(g_ui.msg_label, text);
+        build_two_line_msg(text);
+        lv_label_set_text_static(g_ui.msg_label, g_msg_text);
         lv_obj_clear_flag(g_ui.msg_cont, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(g_ui.msg_label, LV_OBJ_FLAG_HIDDEN);
+        g_msg_active = 1;
     }
 
     if (auto_close_ms > 0) {
@@ -614,6 +778,11 @@ void dashboard_show_message(const char *text, uint32_t auto_close_ms)
         }
         g_ui.msg_timer = lv_timer_create(msg_timer_cb, auto_close_ms, NULL);
     }
+}
+
+int dashboard_message_is_active(void)
+{
+    return g_msg_active ? 1 : 0;
 }
 
 // ---------------------------------------------------------
