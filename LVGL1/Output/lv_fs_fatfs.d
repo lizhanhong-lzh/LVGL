@@ -123,3 +123,6 @@ d:\lvgl\lvgl1\output\lv_fs_fatfs.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\extra\li
 d:\lvgl\lvgl1\output\lv_fs_fatfs.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\extra\libs\fsdrv\../../../../src/extra/libs/freetype/lv_freetype.h
 d:\lvgl\lvgl1\output\lv_fs_fatfs.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\extra\libs\fsdrv\../../../../src/extra/libs/rlottie/lv_rlottie.h
 d:\lvgl\lvgl1\output\lv_fs_fatfs.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\extra\libs\fsdrv\../../../../src/extra/libs/ffmpeg/lv_ffmpeg.h
+d:\lvgl\lvgl1\output\lv_fs_fatfs.o: ..\..\Middlewares\FATFS\src\ff.h
+d:\lvgl\lvgl1\output\lv_fs_fatfs.o: ..\..\Middlewares\FATFS\src\integer.h
+d:\lvgl\lvgl1\output\lv_fs_fatfs.o: ..\..\Middlewares\FATFS\src\ffconf.h

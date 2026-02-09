@@ -49,14 +49,14 @@
             <NotGenerated>0</NotGenerated>
             <InvalidFlash>1</InvalidFlash>
           </TargetStatus>
-          <OutputDirectory>D:\LVGL\LVGL1\Output\</OutputDirectory>
+          <OutputDirectory>D:\LVGL\LVGL1\Out\</OutputDirectory>
           <OutputName>atk_f767</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
           <CreateHexFile>1</CreateHexFile>
           <DebugInformation>1</DebugInformation>
-          <BrowseInformation>1</BrowseInformation>
-          <ListingPath>D:\LVGL\LVGL1\Output\</ListingPath>
+          <BrowseInformation>0</BrowseInformation>
+          <ListingPath>D:\LVGL\LVGL1\Out\</ListingPath>
           <HexFormatSelection>1</HexFormatSelection>
           <Merge32K>0</Merge32K>
           <CreateBatchFile>0</CreateBatchFile>
@@ -341,7 +341,7 @@
               <MiscControls>--no_multibyte_chars</MiscControls>
               <Define>STM32F767xx,USE_HAL_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>..\..\Drivers\CMSIS\Device\ST\STM32F7xx\Include;..\..\Drivers\STM32F7xx_HAL_Driver\Inc;..\..\Drivers\CMSIS\Include;..\..\Drivers;..\..\User;..\..\Middlewares;..\..\Middlewares\LVGL\GUI;..\..\Middlewares\LVGL\GUI\lvgl;..\..\Middlewares\LVGL\GUI\lvgl\src;..\..\Middlewares\LVGL\GUI\lvgl\examples\porting;..\..\User\app</IncludePath>
+              <IncludePath>..\..\Drivers\CMSIS\Device\ST\STM32F7xx\Include;..\..\Drivers\STM32F7xx_HAL_Driver\Inc;..\..\Drivers\CMSIS\Include;..\..\Drivers;..\..\Drivers\SYSTEM\sys;..\..\Drivers\SYSTEM\delay;..\..\Drivers\SYSTEM\usart;..\..\User;..\..\Middlewares;..\..\Middlewares\LVGL\GUI;..\..\Middlewares\LVGL\GUI\lvgl;..\..\Middlewares\LVGL\GUI\lvgl\src;..\..\Middlewares\LVGL\GUI\lvgl\src\extra\libs;..\..\Middlewares\LVGL\GUI\lvgl\examples\porting;..\..\User\app;..\..\Drivers\BSP\NAND;..\..\Drivers\SYSTEM\MALLOC;..\..\Middlewares\FATFS\src;..\..\Middlewares\FATFS\src\option</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -416,11 +416,6 @@
               <FilePath>..\..\User\app\screens\dashboard.c</FilePath>
             </File>
             <File>
-              <FileName>my_font_30.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\User\app\my_font_30.c</FilePath>
-            </File>
-            <File>
               <FileName>obuf.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\User\app\obuf.c</FilePath>
@@ -429,11 +424,6 @@
               <FileName>app.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\User\app\app.c</FilePath>
-            </File>
-            <File>
-              <FileName>my_font_16.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\User\app\my_font_16.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -454,6 +444,11 @@
               <FileName>usart.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\Drivers\SYSTEM\usart\usart.c</FilePath>
+            </File>
+            <File>
+              <FileName>malloc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Drivers\SYSTEM\MALLOC\malloc.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -524,6 +519,11 @@
               <FileName>stm32f7xx_hal_sram.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\Drivers\STM32F7xx_HAL_Driver\Src\stm32f7xx_hal_sram.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32f7xx_hal_nand.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Drivers\STM32F7xx_HAL_Driver\Src\stm32f7xx_hal_nand.c</FilePath>
             </File>
             <File>
               <FileName>stm32f7xx_ll_fmc.c</FileName>
@@ -629,6 +629,36 @@
               <FileName>btim.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\Drivers\BSP\TIMER\btim.c</FilePath>
+            </File>
+            <File>
+              <FileName>nand.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Drivers\BSP\NAND\nand.c</FilePath>
+            </File>
+            <File>
+              <FileName>ftl.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Drivers\BSP\NAND\ftl.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Middlewares/FATFS</GroupName>
+          <Files>
+            <File>
+              <FileName>ff.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Middlewares\FATFS\src\ff.c</FilePath>
+            </File>
+            <File>
+              <FileName>diskio.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Middlewares\FATFS\src\diskio.c</FilePath>
+            </File>
+            <File>
+              <FileName>cc936.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Middlewares\FATFS\src\option\cc936.c</FilePath>
             </File>
           </Files>
         </Group>

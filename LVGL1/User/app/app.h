@@ -24,9 +24,12 @@ typedef struct {
     float azimuth;          // 方位 (Degree)
     float toolface;         // 工具面 (Degree, 0-360)
     float toolface_history[5]; // 最近5次工具面数据，用于同心圆环显示
+    uint8_t toolface_type_history[5]; // 最近5次工具面类型 (0x13=GTF, 0x14=MTF)
     int   tf_type;          // 工具面类型 (5=GTF, 6=MTF) - 用于决定显示颜色或方式
     float pump_pressure;    // 泵压 (MPa)
     int   pump_status;      // 泵状态 (1=开泵, 0=停泵)
+    uint8_t pump_pressure_valid; // 是否收到过泵压数据
+    uint8_t last_update_id; // 最近更新字段 (dashboard_update_id_t)
     
     // 通讯状态
     char  port_name[32];    // 串口名称 (e.g. "COM1")
@@ -45,6 +48,14 @@ typedef struct {
     uint16_t history_len;       
     uint16_t history_pos;       
 } plant_metrics_t;
+
+typedef enum {
+    UPDATE_NONE = 0,
+    UPDATE_INC,
+    UPDATE_AZI,
+    UPDATE_TF,
+    UPDATE_PUMP
+} dashboard_update_id_t;
 
 /* 初始化 APP (创建 UI) */
 void app_init(lv_disp_t *disp);

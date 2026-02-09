@@ -213,3 +213,8 @@ d:\lvgl\lvgl1\output\main.o: ..\..\Drivers\./BSP/SDRAM/sdram.h
 d:\lvgl\lvgl1\output\main.o: ..\..\Drivers\./BSP/MPU/mpu.h
 d:\lvgl\lvgl1\output\main.o: ..\..\Drivers\./BSP/TIMER/btim.h
 d:\lvgl\lvgl1\output\main.o: ..\..\Middlewares\LVGL\GUI\lvgl\examples\porting\lv_port_disp_template.h
+d:\lvgl\lvgl1\output\main.o: ..\..\Middlewares\FATFS\src\ff.h
+d:\lvgl\lvgl1\output\main.o: ..\..\Middlewares\FATFS\src\integer.h
+d:\lvgl\lvgl1\output\main.o: ..\..\Middlewares\FATFS\src\ffconf.h
+d:\lvgl\lvgl1\output\main.o: ..\..\Drivers\./BSP/NAND/nand.h
+d:\lvgl\lvgl1\output\main.o: ..\..\Drivers\./BSP/NAND/ftl.h

@@ -68,6 +68,26 @@ LV_ATTRIBUTE_FAST_MEM static inline lv_opa_t mask_mix(lv_opa_t mask_act, lv_opa_
  *      MACROS
  **********************/
 
+#if defined(STM32F7xx)
+static inline bool lv_draw_mask_addr_valid(uintptr_t addr)
+{
+    if(addr == 0U) return false;
+    if((addr & 0x3U) != 0U) return false;
+
+    /* SRAM/DTCM (0x20000000 ~ 0x2007FFFF) */
+    if(addr >= 0x20000000U && addr <= 0x2007FFFFU) return true;
+    /* SDRAM (0xC0000000 ~ 0xC1FFFFFF) */
+    if(addr >= 0xC0000000U && addr <= 0xC1FFFFFFU) return true;
+
+    return false;
+}
+#else
+static inline bool lv_draw_mask_addr_valid(uintptr_t addr)
+{
+    return addr != 0U;
+}
+#endif
+
 /**********************
  *   GLOBAL FUNCTIONS
  **********************/
@@ -117,7 +137,14 @@ LV_ATTRIBUTE_FAST_MEM lv_draw_mask_res_t lv_draw_mask_apply(lv_opa_t * mask_buf,
     _lv_draw_mask_saved_t * m = LV_GC_ROOT(_lv_draw_mask_list);
 
     while(m->param) {
-        dsc = m->param;
+        uintptr_t param_addr = (uintptr_t)m->param;
+        if(!lv_draw_mask_addr_valid(param_addr)) {
+            LV_LOG_ERROR("draw mask param invalid: %p", (void *)param_addr);
+            m++;
+            continue;
+        }
+
+        dsc = (_lv_draw_mask_common_dsc_t *)param_addr;
         lv_draw_mask_res_t res = LV_DRAW_MASK_RES_FULL_COVER;
         res = dsc->cb(mask_buf, abs_x, abs_y, len, (void *)m->param);
         if(res == LV_DRAW_MASK_RES_TRANSP) return LV_DRAW_MASK_RES_TRANSP;
@@ -151,8 +178,13 @@ LV_ATTRIBUTE_FAST_MEM lv_draw_mask_res_t lv_draw_mask_apply_ids(lv_opa_t * mask_
     for(int i = 0; i < ids_count; i++) {
         int16_t id = ids[i];
         if(id == LV_MASK_ID_INV) continue;
-        dsc = LV_GC_ROOT(_lv_draw_mask_list[id]).param;
-        if(!dsc) continue;
+        uintptr_t param_addr = (uintptr_t)LV_GC_ROOT(_lv_draw_mask_list[id]).param;
+        if(!param_addr) continue;
+        if(!lv_draw_mask_addr_valid(param_addr)) {
+            LV_LOG_ERROR("draw mask param invalid: %p", (void *)param_addr);
+            continue;
+        }
+        dsc = (_lv_draw_mask_common_dsc_t *)param_addr;
         lv_draw_mask_res_t res = LV_DRAW_MASK_RES_FULL_COVER;
         res = dsc->cb(mask_buf, abs_x, abs_y, len, dsc);
         if(res == LV_DRAW_MASK_RES_TRANSP) return LV_DRAW_MASK_RES_TRANSP;
@@ -257,10 +289,20 @@ bool lv_draw_mask_is_any(const lv_area_t * a)
 {
     if(a == NULL) return LV_GC_ROOT(_lv_draw_mask_list[0]).param ? true : false;
 
+    if(!lv_draw_mask_addr_valid((uintptr_t)a)) {
+        LV_LOG_ERROR("draw mask area invalid: %p", (void *)a);
+        return false;
+    }
+
     uint8_t i;
     for(i = 0; i < _LV_MASK_MAX_NUM; i++) {
-        _lv_draw_mask_common_dsc_t * comm_param = LV_GC_ROOT(_lv_draw_mask_list[i]).param;
-        if(comm_param == NULL) continue;
+        uintptr_t param_addr = (uintptr_t)LV_GC_ROOT(_lv_draw_mask_list[i]).param;
+        if(!param_addr) continue;
+        if(!lv_draw_mask_addr_valid(param_addr)) {
+            LV_LOG_ERROR("draw mask param invalid: %p", (void *)param_addr);
+            continue;
+        }
+        _lv_draw_mask_common_dsc_t * comm_param = (_lv_draw_mask_common_dsc_t *)param_addr;
         if(comm_param->type == LV_DRAW_MASK_TYPE_RADIUS) {
             lv_draw_mask_radius_param_t * radius_param = LV_GC_ROOT(_lv_draw_mask_list[i]).param;
             if(radius_param->cfg.outer) {

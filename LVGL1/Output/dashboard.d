@@ -127,3 +127,6 @@ d:\lvgl\lvgl1\output\dashboard.o: ..\..\Middlewares\LVGL\GUI\lvgl\src/extra/libs
 d:\lvgl\lvgl1\output\dashboard.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h
 d:\lvgl\lvgl1\output\dashboard.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\math.h
 d:\lvgl\lvgl1\output\dashboard.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdlib.h
+d:\lvgl\lvgl1\output\dashboard.o: ..\..\Middlewares\FATFS\src\ff.h
+d:\lvgl\lvgl1\output\dashboard.o: ..\..\Middlewares\FATFS\src\integer.h
+d:\lvgl\lvgl1\output\dashboard.o: ..\..\Middlewares\FATFS\src\ffconf.h

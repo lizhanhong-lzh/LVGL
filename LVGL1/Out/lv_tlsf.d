@@ -1,0 +1,13 @@
+d:\lvgl\lvgl1\out\lv_tlsf.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\misc\lv_tlsf.c
+d:\lvgl\lvgl1\out\lv_tlsf.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\misc\../lv_conf_internal.h
+d:\lvgl\lvgl1\out\lv_tlsf.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+d:\lvgl\lvgl1\out\lv_tlsf.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\misc\../lv_conf_kconfig.h
+d:\lvgl\lvgl1\out\lv_tlsf.o: ..\..\Middlewares\LVGL\GUI\lvgl\examples\porting\../../lv_conf.h
+d:\lvgl\lvgl1\out\lv_tlsf.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\limits.h
+d:\lvgl\lvgl1\out\lv_tlsf.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\misc\lv_tlsf.h
+d:\lvgl\lvgl1\out\lv_tlsf.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
+d:\lvgl\lvgl1\out\lv_tlsf.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\misc\lv_mem.h
+d:\lvgl\lvgl1\out\lv_tlsf.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
+d:\lvgl\lvgl1\out\lv_tlsf.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\misc\lv_types.h
+d:\lvgl\lvgl1\out\lv_tlsf.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\misc\lv_log.h
+d:\lvgl\lvgl1\out\lv_tlsf.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\misc\lv_assert.h

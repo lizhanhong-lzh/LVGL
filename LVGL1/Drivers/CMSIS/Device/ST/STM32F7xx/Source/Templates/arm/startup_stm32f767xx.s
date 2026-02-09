@@ -30,7 +30,7 @@
 ;   <o> Stack Size (in Bytes) <0x0-0xFFFFFFFF:8>
 ; </h>
 
-Stack_Size      EQU     0x00000800
+Stack_Size      EQU     0x00008000
 
                 AREA    STACK, NOINIT, READWRITE, ALIGN=3
 Stack_Mem       SPACE   Stack_Size
@@ -41,7 +41,7 @@ __initial_sp
 ;   <o>  Heap Size (in Bytes) <0x0-0xFFFFFFFF:8>
 ; </h>
 
-;Î´ÓÃµ½±àÒëÆ÷×Ô´øµÄÄÚ´æ¹ÜÀí(malloc,freeµÈ)£¬ÉèÖÃHeap_SzieÎª0
+;Î´ï¿½Ãµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô´ï¿½ï¿½ï¿½ï¿½Ú´ï¿½ï¿½ï¿½ï¿½(malloc,freeï¿½ï¿½)ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Heap_SzieÎª0
 Heap_Size       EQU     0x00000000
 
                 AREA    HEAP, NOINIT, READWRITE, ALIGN=3
@@ -198,7 +198,7 @@ Reset_Handler    PROC
                  EXPORT  Reset_Handler             [WEAK]
         IMPORT  SystemInit
         IMPORT  __main
-                 LDR.W     R0, =0xE000ED88    ; Ê¹ÄÜ¸¡µãÔËËã CP10,CP11
+                 LDR.W     R0, =0xE000ED88    ; Ê¹ï¿½Ü¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ CP10,CP11
                  LDR     R1,[R0]
                  ORR     R1,R1,#(0xF << 20)
                  STR     R1,[R0]

@@ -101,8 +101,17 @@ uint8_t g_usart_rx_buf[USART_REC_LEN];
 uint16_t g_usart_rx_sta = 0;
 
 uint8_t g_rx_buffer[RXBUFFERSIZE];    /* HAL��ʹ�õĴ��ڽ��ջ��� */
+uint8_t g_rx_buffer3[RXBUFFERSIZE];   /* USART3 接收缓冲区 */
 
 UART_HandleTypeDef g_uart1_handle;    /* UART��� */
+UART_HandleTypeDef g_uart3_handle;    /* UART3 句柄 */
+
+static volatile uart_rx_source_t g_uart_last_rx_port = UART_SRC_UNKNOWN;
+
+uart_rx_source_t usart_get_last_rx_port(void)
+{
+    return g_uart_last_rx_port;
+}
 
 /* UART 中断进入计数（用于底层接收调试） */
 volatile uint32_t g_uart_isr_cnt = 0;
@@ -148,6 +157,24 @@ void usart_init(uint32_t baudrate)
     HAL_UART_Receive_IT(&g_uart1_handle, (uint8_t *)g_rx_buffer, RXBUFFERSIZE);
 }
 
+void usart3_init(uint32_t baudrate)
+{
+    g_uart3_handle.Instance = USART3;
+    g_uart3_handle.Init.BaudRate = baudrate;
+    if (UART_DEFAULT_PARITY == UART_PARITY_NONE) {
+        g_uart3_handle.Init.WordLength = UART_WORDLENGTH_8B;
+    } else {
+        g_uart3_handle.Init.WordLength = UART_WORDLENGTH_9B;
+    }
+    g_uart3_handle.Init.StopBits = UART_DEFAULT_STOPBITS;
+    g_uart3_handle.Init.Parity = UART_DEFAULT_PARITY;
+    g_uart3_handle.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+    g_uart3_handle.Init.Mode = UART_MODE_TX_RX;
+    HAL_UART_Init(&g_uart3_handle);
+
+    HAL_UART_Receive_IT(&g_uart3_handle, (uint8_t *)g_rx_buffer3, RXBUFFERSIZE);
+}
+
 /**
  * @brief       UART�ײ��ʼ������
  * @param       huart: UART�������ָ��
@@ -180,6 +207,27 @@ void HAL_UART_MspInit(UART_HandleTypeDef *huart)
         HAL_NVIC_SetPriority(USART_UX_IRQn, 3, 3);                  /* ��ռ���ȼ�3�������ȼ�3 */
 #endif
     }
+    else if(huart->Instance == USART3)
+    {
+        __HAL_RCC_USART3_CLK_ENABLE();
+        __HAL_RCC_GPIOB_CLK_ENABLE();
+
+        gpio_init_struct.Pin = GPIO_PIN_10;                          /* PB10: TX */
+        gpio_init_struct.Mode = GPIO_MODE_AF_PP;
+        gpio_init_struct.Pull = GPIO_PULLUP;
+        gpio_init_struct.Speed = GPIO_SPEED_FREQ_HIGH;
+        gpio_init_struct.Alternate = GPIO_AF7_USART3;
+        HAL_GPIO_Init(GPIOB, &gpio_init_struct);
+
+        gpio_init_struct.Pin = GPIO_PIN_11;                          /* PB11: RX */
+        gpio_init_struct.Alternate = GPIO_AF7_USART3;
+        HAL_GPIO_Init(GPIOB, &gpio_init_struct);
+
+#if USART_EN_RX
+        HAL_NVIC_EnableIRQ(USART3_IRQn);
+        HAL_NVIC_SetPriority(USART3_IRQn, 3, 3);
+#endif
+    }
 }
 
 /**
@@ -191,6 +239,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if(huart->Instance == USART_UX)                           /* ����Ǵ���1 */
     {
+        g_uart_last_rx_port = UART_SRC_USART2;
         /* 【关键修复】立即重启下一次接收，防止丢字节！ */
         HAL_UART_Receive_IT(&g_uart1_handle, (uint8_t *)g_rx_buffer, RXBUFFERSIZE);
 
@@ -249,6 +298,30 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         }
 #endif
         /* 【已移到函数开头】HAL_UART_Receive_IT 必须第一时间执行 */
+    }
+    else if(huart->Instance == USART3)
+    {
+        g_uart_last_rx_port = UART_SRC_USART3;
+        HAL_UART_Receive_IT(&g_uart3_handle, (uint8_t *)g_rx_buffer3, RXBUFFERSIZE);
+
+        if (__HAL_UART_GET_FLAG(huart, UART_FLAG_ORE)) {
+            __HAL_UART_CLEAR_OREFLAG(huart);
+            g_uart_err_ore++;
+        }
+        if (__HAL_UART_GET_FLAG(huart, UART_FLAG_FE)) {
+            __HAL_UART_CLEAR_FEFLAG(huart);
+            g_uart_err_fe++;
+        }
+        if (__HAL_UART_GET_FLAG(huart, UART_FLAG_NE)) {
+            __HAL_UART_CLEAR_NEFLAG(huart);
+            g_uart_err_ne++;
+        }
+        if (__HAL_UART_GET_FLAG(huart, UART_FLAG_PE)) {
+            __HAL_UART_CLEAR_PEFLAG(huart);
+            g_uart_err_pe++;
+        }
+
+        usart_rx_byte_hook(g_rx_buffer3[0]);
     }
 }
 

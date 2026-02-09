@@ -23,15 +23,47 @@
 #include "stm32f7xx_it.h"
 #include "stm32f7xx_hal.h"
 #include "./BSP/LED/led.h"
+#include "./SYSTEM/usart/usart.h"
+#include <stdio.h>
+
+extern volatile uint32_t g_boot_stage;
+
+void hard_fault_handler_c(uint32_t *sp);
 
 static void fault_blink(void)
 {
+  printf("[FAULT] stage=%lu\r\n", (unsigned long)g_boot_stage);
   for (;;) {
     LED1_TOGGLE();
     for (volatile uint32_t i = 0; i < 200000; i++) {
       __NOP();
     }
   }
+}
+
+void hard_fault_handler_c(uint32_t *sp)
+{
+  uint32_t r0  = sp[0];
+  uint32_t r1  = sp[1];
+  uint32_t r2  = sp[2];
+  uint32_t r3  = sp[3];
+  uint32_t r12 = sp[4];
+  uint32_t lr  = sp[5];
+  uint32_t pc  = sp[6];
+  uint32_t psr = sp[7];
+
+  printf("[HARDFAULT] stage=%lu\r\n", (unsigned long)g_boot_stage);
+  printf(" r0=%08lX r1=%08lX r2=%08lX r3=%08lX\r\n", r0, r1, r2, r3);
+  printf(" r12=%08lX lr=%08lX pc=%08lX psr=%08lX\r\n", r12, lr, pc, psr);
+  printf(" CFSR=%08lX HFSR=%08lX DFSR=%08lX\r\n",
+         (unsigned long)SCB->CFSR,
+         (unsigned long)SCB->HFSR,
+         (unsigned long)SCB->DFSR);
+  printf(" MMFAR=%08lX BFAR=%08lX\r\n",
+         (unsigned long)SCB->MMFAR,
+         (unsigned long)SCB->BFAR);
+
+  fault_blink();
 }
 
 /** @addtogroup STM32F7xx_HAL_Examples
@@ -68,9 +100,14 @@ void NMI_Handler(void)
   * @param  None
   * @retval None
   */
-void HardFault_Handler(void)
+__asm void HardFault_Handler(void)
 {
-  fault_blink();
+  IMPORT hard_fault_handler_c
+  TST LR, #4
+  ITE EQ
+  MRSEQ R0, MSP
+  MRSNE R0, PSP
+  B hard_fault_handler_c
 }
 
 /**
@@ -141,6 +178,16 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   HAL_IncTick();
+}
+
+/**
+  * @brief  This function handles USART3 global interrupt.
+  * @param  None
+  * @retval None
+  */
+void USART3_IRQHandler(void)
+{
+  HAL_UART_IRQHandler(&g_uart3_handle);
 }
 
 /******************************************************************************/

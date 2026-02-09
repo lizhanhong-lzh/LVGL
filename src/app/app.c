@@ -6,6 +6,7 @@
 #include <string.h>
 #include <math.h> // for sin
 #include <ctype.h>
+#include <stdio.h>
 
 static plant_metrics_t g_sim;
 

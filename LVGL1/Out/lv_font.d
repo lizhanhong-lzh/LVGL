@@ -1,0 +1,16 @@
+d:\lvgl\lvgl1\out\lv_font.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\font\lv_font.c
+d:\lvgl\lvgl1\out\lv_font.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\font\lv_font.h
+d:\lvgl\lvgl1\out\lv_font.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\font\../lv_conf_internal.h
+d:\lvgl\lvgl1\out\lv_font.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+d:\lvgl\lvgl1\out\lv_font.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\font\../lv_conf_kconfig.h
+d:\lvgl\lvgl1\out\lv_font.o: ..\..\Middlewares\LVGL\GUI\lvgl\examples\porting\../../lv_conf.h
+d:\lvgl\lvgl1\out\lv_font.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
+d:\lvgl\lvgl1\out\lv_font.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdbool.h
+d:\lvgl\lvgl1\out\lv_font.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\font\lv_symbol_def.h
+d:\lvgl\lvgl1\out\lv_font.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\font\../misc/lv_area.h
+d:\lvgl\lvgl1\out\lv_font.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\font\../misc/lv_utils.h
+d:\lvgl\lvgl1\out\lv_font.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\font\../misc/lv_log.h
+d:\lvgl\lvgl1\out\lv_font.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\font\../misc/lv_types.h
+d:\lvgl\lvgl1\out\lv_font.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\font\../misc/lv_assert.h
+d:\lvgl\lvgl1\out\lv_font.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\font\../misc/lv_mem.h
+d:\lvgl\lvgl1\out\lv_font.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h

@@ -32,24 +32,45 @@
 #include "./SYSTEM/sys/sys.h"
 
 /* ========================= 串口选择 =========================
- * 目标：板载 COM2 RS232 母口
- * 对应：USART2 (PA2=TX, PA3=RX)
+ * 说明：通过 UART_PORT_SELECT 在 USART1 / USART2 间切换。
+ * - UART_PORT_SELECT = 1: 使用 USART1（板载 USB 转串口常用，PA9/PA10）
+ * - UART_PORT_SELECT = 2: 使用 USART2（板载 COM2 RS232，PA2/PA3）
  */
+#define UART_PORT_SELECT  2
 
-#define USART_TX_GPIO_PORT              GPIOA
-#define USART_TX_GPIO_PIN               GPIO_PIN_2
-#define USART_TX_GPIO_AF                GPIO_AF7_USART2
-#define USART_TX_GPIO_CLK_ENABLE()      do{ __HAL_RCC_GPIOA_CLK_ENABLE(); }while(0)
+#if UART_PORT_SELECT == 1
+	/* USART1: PA9=TX, PA10=RX */
+	#define USART_TX_GPIO_PORT              GPIOA
+	#define USART_TX_GPIO_PIN               GPIO_PIN_9
+	#define USART_TX_GPIO_AF                GPIO_AF7_USART1
+	#define USART_TX_GPIO_CLK_ENABLE()      do{ __HAL_RCC_GPIOA_CLK_ENABLE(); }while(0)
 
-#define USART_RX_GPIO_PORT              GPIOA
-#define USART_RX_GPIO_PIN               GPIO_PIN_3
-#define USART_RX_GPIO_AF                GPIO_AF7_USART2
-#define USART_RX_GPIO_CLK_ENABLE()      do{ __HAL_RCC_GPIOA_CLK_ENABLE(); }while(0)
+	#define USART_RX_GPIO_PORT              GPIOA
+	#define USART_RX_GPIO_PIN               GPIO_PIN_10
+	#define USART_RX_GPIO_AF                GPIO_AF7_USART1
+	#define USART_RX_GPIO_CLK_ENABLE()      do{ __HAL_RCC_GPIOA_CLK_ENABLE(); }while(0)
 
-#define USART_UX                        USART2
-#define USART_UX_IRQn                   USART2_IRQn
-#define USART_UX_IRQHandler             USART2_IRQHandler
-#define USART_UX_CLK_ENABLE()           do{ __HAL_RCC_USART2_CLK_ENABLE(); }while(0)
+	#define USART_UX                        USART1
+	#define USART_UX_IRQn                   USART1_IRQn
+	#define USART_UX_IRQHandler             USART1_IRQHandler
+	#define USART_UX_CLK_ENABLE()           do{ __HAL_RCC_USART1_CLK_ENABLE(); }while(0)
+#else
+	/* USART2: PA2=TX, PA3=RX */
+	#define USART_TX_GPIO_PORT              GPIOA
+	#define USART_TX_GPIO_PIN               GPIO_PIN_2
+	#define USART_TX_GPIO_AF                GPIO_AF7_USART2
+	#define USART_TX_GPIO_CLK_ENABLE()      do{ __HAL_RCC_GPIOA_CLK_ENABLE(); }while(0)
+
+	#define USART_RX_GPIO_PORT              GPIOA
+	#define USART_RX_GPIO_PIN               GPIO_PIN_3
+	#define USART_RX_GPIO_AF                GPIO_AF7_USART2
+	#define USART_RX_GPIO_CLK_ENABLE()      do{ __HAL_RCC_GPIOA_CLK_ENABLE(); }while(0)
+
+	#define USART_UX                        USART2
+	#define USART_UX_IRQn                   USART2_IRQn
+	#define USART_UX_IRQHandler             USART2_IRQHandler
+	#define USART_UX_CLK_ENABLE()           do{ __HAL_RCC_USART2_CLK_ENABLE(); }while(0)
+#endif
 
 /*******************************************************************************************************/
 
@@ -73,6 +94,15 @@
 #define USART_LEGACY_LINE_RX  0
 
 extern UART_HandleTypeDef g_uart1_handle;       /* UART��� */
+extern UART_HandleTypeDef g_uart3_handle;       /* UART3 句柄 */
+
+typedef enum {
+	UART_SRC_UNKNOWN = 0,
+	UART_SRC_USART2 = 2,
+	UART_SRC_USART3 = 3
+} uart_rx_source_t;
+
+uart_rx_source_t usart_get_last_rx_port(void);
 
 /* UART 中断进入计数（用于底层接收调试） */
 extern volatile uint32_t g_uart_isr_cnt;
@@ -97,6 +127,7 @@ void usart_rx_byte_hook(uint8_t byte);
 
 
 void usart_init(uint32_t baudrate);             /* ���ڳ�ʼ������ */
+void usart3_init(uint32_t baudrate);
 void usart_rx_recover_if_needed(void);
 
 #endif

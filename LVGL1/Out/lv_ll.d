@@ -1,0 +1,11 @@
+d:\lvgl\lvgl1\out\lv_ll.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\misc\lv_ll.c
+d:\lvgl\lvgl1\out\lv_ll.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\misc\lv_ll.h
+d:\lvgl\lvgl1\out\lv_ll.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+d:\lvgl\lvgl1\out\lv_ll.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
+d:\lvgl\lvgl1\out\lv_ll.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdbool.h
+d:\lvgl\lvgl1\out\lv_ll.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\misc\lv_mem.h
+d:\lvgl\lvgl1\out\lv_ll.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\misc\../lv_conf_internal.h
+d:\lvgl\lvgl1\out\lv_ll.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\misc\../lv_conf_kconfig.h
+d:\lvgl\lvgl1\out\lv_ll.o: ..\..\Middlewares\LVGL\GUI\lvgl\examples\porting\../../lv_conf.h
+d:\lvgl\lvgl1\out\lv_ll.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
+d:\lvgl\lvgl1\out\lv_ll.o: ..\..\Middlewares\LVGL\GUI\lvgl\src\misc\lv_types.h

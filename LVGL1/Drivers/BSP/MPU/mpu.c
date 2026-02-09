@@ -1,23 +1,23 @@
 /**
  ****************************************************************************************************
  * @file        mpu.c
- * @author      ÕýµãÔ­×ÓÍÅ¶Ó(ALIENTEK)
+ * @author      ï¿½ï¿½ï¿½ï¿½Ô­ï¿½ï¿½ï¿½Å¶ï¿½(ALIENTEK)
  * @version     V1.0
  * @date        2022-07-19
- * @brief       MPUÄÚ´æ±£»¤ Çý¶¯´úÂë
- * @license     Copyright (c) 2020-2032, ¹ãÖÝÊÐÐÇÒíµç×Ó¿Æ¼¼ÓÐÏÞ¹«Ë¾
+ * @brief       MPUï¿½Ú´æ±£ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+ * @license     Copyright (c) 2020-2032, ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¿Æ¼ï¿½ï¿½ï¿½ï¿½Þ¹ï¿½Ë¾
  ****************************************************************************************************
  * @attention
  *
- * ÊµÑéÆ½Ì¨:ÕýµãÔ­×Ó °¢²¨ÂÞ F767¿ª·¢°å
- * ÔÚÏßÊÓÆµ:www.yuanzige.com
- * ¼¼ÊõÂÛÌ³:www.openedv.com
- * ¹«Ë¾ÍøÖ·:www.alientek.com
- * ¹ºÂòµØÖ·:openedv.taobao.com
+ * Êµï¿½ï¿½Æ½Ì¨:ï¿½ï¿½ï¿½ï¿½Ô­ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ F767ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+ * ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æµ:www.yuanzige.com
+ * ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ì³:www.openedv.com
+ * ï¿½ï¿½Ë¾ï¿½ï¿½Ö·:www.alientek.com
+ * ï¿½ï¿½ï¿½ï¿½ï¿½Ö·:openedv.taobao.com
  *
- * ÐÞ¸ÄËµÃ÷
+ * ï¿½Þ¸ï¿½Ëµï¿½ï¿½
  * V1.0 20220719
- * µÚÒ»´Î·¢²¼
+ * ï¿½ï¿½Ò»ï¿½Î·ï¿½ï¿½ï¿½
  *
  ****************************************************************************************************
  */
@@ -26,87 +26,90 @@
 #include "./SYSTEM/delay/delay.h"
 #include "./BSP/LED/led.h"
 
+extern volatile uint32_t g_boot_stage;
+
 
 /**
- * @brief       ÉèÖÃÄ³¸öÇøÓòµÄMPU±£»¤
- * @param       baseaddr: MPU±£»¤ÇøÓòµÄ»ùÖ·(Ê×µØÖ·)
- * @param       size:MPU±£»¤ÇøÓòµÄ´óÐ¡(±ØÐëÊÇ32µÄ±¶Êý,µ¥Î»Îª×Ö½Ú)
- * @param       rnum:MPU±£»¤Çø±àºÅ,·¶Î§:0~7,×î´óÖ§³Ö8¸ö±£»¤ÇøÓò
- * @param       de:½ûÖ¹Ö¸Áî·ÃÎÊ;0,ÔÊÐíÖ¸Áî·ÃÎÊ;1,½ûÖ¹Ö¸Áî·ÃÎÊ
- * @param       ap:·ÃÎÊÈ¨ÏÞ,·ÃÎÊ¹ØÏµÈçÏÂ:
- *   @arg       0,ÎÞ·ÃÎÊ£¨ÌØÈ¨&ÓÃ»§¶¼²»¿É·ÃÎÊ£©
- *   @arg       1,½öÖ§³ÖÌØÈ¨¶ÁÐ´·ÃÎÊ
- *   @arg       2,½ûÖ¹ÓÃ»§Ð´·ÃÎÊ£¨ÌØÈ¨¿É¶ÁÐ´·ÃÎÊ£©
- *   @arg       3,È«·ÃÎÊ£¨ÌØÈ¨&ÓÃ»§¶¼¿É·ÃÎÊ£©
- *   @arg       4,ÎÞ·¨Ô¤²â(½ûÖ¹ÉèÖÃÎª4!!!)
- *   @arg       5,½öÖ§³ÖÌØÈ¨¶Á·ÃÎÊ
- *   @arg       6,Ö»¶Á£¨ÌØÈ¨&ÓÃ»§¶¼²»¿ÉÒÔÐ´£©
- *   @note      Ïê¼û:STM32F7±à³ÌÊÖ²á.pdf,4.6½Ú,Table 89.
- * @param       sen:ÊÇ·ñÔÊÐí¹²ÓÃ;0,²»ÔÊÐí;1,ÔÊÐí
- * @param       cen:ÊÇ·ñÔÊÐícache;0,²»ÔÊÐí;1,ÔÊÐí
- * @param       ben:ÊÇ·ñÔÊÐí»º³å;0,²»ÔÊÐí;1,ÔÊÐí
- * @retval      0, ³É¹¦; 1, ´íÎó;
+ * @brief       ï¿½ï¿½ï¿½ï¿½Ä³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½MPUï¿½ï¿½ï¿½ï¿½
+ * @param       baseaddr: MPUï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä»ï¿½Ö·(ï¿½×µï¿½Ö·)
+ * @param       size:MPUï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä´ï¿½Ð¡(ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½32ï¿½Ä±ï¿½ï¿½ï¿½,ï¿½ï¿½Î»Îªï¿½Ö½ï¿½)
+ * @param       rnum:MPUï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½Î§:0~7,ï¿½ï¿½ï¿½Ö§ï¿½ï¿½8ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+ * @param       de:ï¿½ï¿½Ö¹Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½;0,ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½;1,ï¿½ï¿½Ö¹Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½
+ * @param       ap:ï¿½ï¿½ï¿½ï¿½È¨ï¿½ï¿½,ï¿½ï¿½ï¿½Ê¹ï¿½Ïµï¿½ï¿½ï¿½ï¿½:
+ *   @arg       0,ï¿½Þ·ï¿½ï¿½Ê£ï¿½ï¿½ï¿½È¨&ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É·ï¿½ï¿½Ê£ï¿½
+ *   @arg       1,ï¿½ï¿½Ö§ï¿½ï¿½ï¿½ï¿½È¨ï¿½ï¿½Ð´ï¿½ï¿½ï¿½ï¿½
+ *   @arg       2,ï¿½ï¿½Ö¹ï¿½Ã»ï¿½Ð´ï¿½ï¿½ï¿½Ê£ï¿½ï¿½ï¿½È¨ï¿½É¶ï¿½Ð´ï¿½ï¿½ï¿½Ê£ï¿½
+ *   @arg       3,È«ï¿½ï¿½ï¿½Ê£ï¿½ï¿½ï¿½È¨&ï¿½Ã»ï¿½ï¿½ï¿½ï¿½É·ï¿½ï¿½Ê£ï¿½
+ *   @arg       4,ï¿½Þ·ï¿½Ô¤ï¿½ï¿½(ï¿½ï¿½Ö¹ï¿½ï¿½ï¿½ï¿½Îª4!!!)
+ *   @arg       5,ï¿½ï¿½Ö§ï¿½ï¿½ï¿½ï¿½È¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+ *   @arg       6,Ö»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¨&ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð´ï¿½ï¿½
+ *   @note      ï¿½ï¿½ï¿½:STM32F7ï¿½ï¿½ï¿½ï¿½Ö²ï¿½.pdf,4.6ï¿½ï¿½,Table 89.
+ * @param       sen:ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½;0,ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½;1,ï¿½ï¿½ï¿½ï¿½
+ * @param       cen:ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½cache;0,ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½;1,ï¿½ï¿½ï¿½ï¿½
+ * @param       ben:ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½;0,ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½;1,ï¿½ï¿½ï¿½ï¿½
+ * @retval      0, ï¿½É¹ï¿½; 1, ï¿½ï¿½ï¿½ï¿½;
  */
 uint8_t mpu_set_protection(uint32_t baseaddr, uint32_t size, uint32_t rnum, uint8_t de, uint8_t ap, uint8_t sen, uint8_t cen, uint8_t ben)
 {
-    MPU_Region_InitTypeDef mpu_region_init_struct;           /* MPU³õÊ¼»¯¾ä±ú */
-    HAL_MPU_Disable();            /* ÅäÖÃMPUÖ®Ç°ÏÈ¹Ø±ÕMPU,ÅäÖÃÍê³ÉÒÔºóÔÚÊ¹ÄÜMPU */
+    MPU_Region_InitTypeDef mpu_region_init_struct;           /* MPUï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ */
+    HAL_MPU_Disable();            /* ï¿½ï¿½ï¿½ï¿½MPUÖ®Ç°ï¿½È¹Ø±ï¿½MPU,ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ôºï¿½ï¿½ï¿½Ê¹ï¿½ï¿½MPU */
 
-    mpu_region_init_struct.Enable = MPU_REGION_ENABLE;       /* Ê¹ÄÜ¸Ã±£»¤ÇøÓò */
-    mpu_region_init_struct.Number = rnum;                    /* ÉèÖÃ±£»¤ÇøÓò */
-    mpu_region_init_struct.BaseAddress = baseaddr;           /* ÉèÖÃ»ùÖ· */
-    mpu_region_init_struct.Size = size;                      /* ÉèÖÃ±£»¤ÇøÓò´óÐ¡ */
-    mpu_region_init_struct.SubRegionDisable = 0X00;          /* ½ûÖ¹×ÓÇøÓò */
-    mpu_region_init_struct.TypeExtField = MPU_TEX_LEVEL0;    /* ÉèÖÃÀàÐÍÀ©Õ¹ÓòÎªlevel0 */
-    mpu_region_init_struct.DisableExec = de;                 /* ÊÇ·ñÔÊÐíÖ¸Áî·ÃÎÊ(ÔÊÐí¶ÁÈ¡Ö¸Áî) */
-    mpu_region_init_struct.AccessPermission = ap;            /* ÉèÖÃ·ÃÎÊÈ¨ÏÞ */
-    mpu_region_init_struct.IsShareable = sen;                /* ÊÇ·ñÔÊÐí¹²ÓÃ */
-    mpu_region_init_struct.IsCacheable = cen;                /* ÊÇ·ñÔÊÐícache */
-    mpu_region_init_struct.IsBufferable = ben;               /* ÊÇ·ñÔÊÐí»º³å */
-    HAL_MPU_ConfigRegion(&mpu_region_init_struct);           /* ÅäÖÃMPU */
-    HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);                  /* ¿ªÆôMPU */
+    mpu_region_init_struct.Enable = MPU_REGION_ENABLE;       /* Ê¹ï¿½Ü¸Ã±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
+    mpu_region_init_struct.Number = rnum;                    /* ï¿½ï¿½ï¿½Ã±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
+    mpu_region_init_struct.BaseAddress = baseaddr;           /* ï¿½ï¿½ï¿½Ã»ï¿½Ö· */
+    mpu_region_init_struct.Size = size;                      /* ï¿½ï¿½ï¿½Ã±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¡ */
+    mpu_region_init_struct.SubRegionDisable = 0X00;          /* ï¿½ï¿½Ö¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
+    mpu_region_init_struct.TypeExtField = MPU_TEX_LEVEL0;    /* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ¹ï¿½ï¿½Îªlevel0 */
+    mpu_region_init_struct.DisableExec = de;                 /* ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½(ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡Ö¸ï¿½ï¿½) */
+    mpu_region_init_struct.AccessPermission = ap;            /* ï¿½ï¿½ï¿½Ã·ï¿½ï¿½ï¿½È¨ï¿½ï¿½ */
+    mpu_region_init_struct.IsShareable = sen;                /* ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
+    mpu_region_init_struct.IsCacheable = cen;                /* ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½cache */
+    mpu_region_init_struct.IsBufferable = ben;               /* ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
+    HAL_MPU_ConfigRegion(&mpu_region_init_struct);           /* ï¿½ï¿½ï¿½ï¿½MPU */
+    HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);                  /* ï¿½ï¿½ï¿½ï¿½MPU */
     return 0;
 }
 
 /**
- * @brief       ÉèÖÃÐèÒª±£»¤µÄ´æ´¢¿é
- * @note        ±ØÐë¶Ô²¿·Ö´æ´¢ÇøÓò½øÐÐMPU±£»¤,·ñÔò¿ÉÄÜµ¼ÖÂ³ÌÐòÔËÐÐÒì³£
- *              ±ÈÈçMCUÆÁ²»ÏÔÊ¾,ÉãÏñÍ·²É¼¯Êý¾Ý³ö´íµÈµÈÎÊÌâ
- * @param       ÎÞ
- * @retval      ÎÞ
+ * @brief       ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½ï¿½Ä´æ´¢ï¿½ï¿½
+ * @note        ï¿½ï¿½ï¿½ï¿½Ô²ï¿½ï¿½Ö´æ´¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½MPUï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Üµï¿½ï¿½Â³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ì³£
+ *              ï¿½ï¿½ï¿½ï¿½MCUï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¾,ï¿½ï¿½ï¿½ï¿½Í·ï¿½É¼ï¿½ï¿½ï¿½ï¿½Ý³ï¿½ï¿½ï¿½ï¿½Èµï¿½ï¿½ï¿½ï¿½ï¿½
+ * @param       ï¿½ï¿½
+ * @retval      ï¿½ï¿½
  */
 void mpu_memory_protection(void)
 {
-    /* ±£»¤Õû¸öÄÚ²¿SRAM,°üÀ¨SRAM1,SRAM2ºÍDTCM,¹²512K×Ö½Ú,ÔÊÐíÖ¸Áî·ÃÎÊ,½ûÖ¹¹²ÓÃ,ÔÊÐícache,ÔÊÐí»º³å*/
+    /* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú²ï¿½SRAM,ï¿½ï¿½ï¿½ï¿½SRAM1,SRAM2ï¿½ï¿½DTCM,ï¿½ï¿½512Kï¿½Ö½ï¿½,ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½Ö¹ï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½ï¿½ï¿½cache,ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½*/
     mpu_set_protection(0x20000000, MPU_REGION_SIZE_512KB, MPU_REGION_NUMBER1, MPU_INSTRUCTION_ACCESS_ENABLE,
                        MPU_REGION_FULL_ACCESS, MPU_ACCESS_NOT_SHAREABLE, MPU_ACCESS_CACHEABLE, MPU_ACCESS_BUFFERABLE);
 
-    /* ±£»¤MCU LCDÆÁËùÔÚµÄFMCÇøÓò,,¹²64M×Ö½Ú,ÔÊÐíÖ¸Áî·ÃÎÊ,½ûÖ¹¹²ÓÃ,½ûÖ¹cache,½ûÖ¹»º³å */
+    /* ï¿½ï¿½ï¿½ï¿½MCU LCDï¿½ï¿½ï¿½ï¿½ï¿½Úµï¿½FMCï¿½ï¿½ï¿½ï¿½,,ï¿½ï¿½64Mï¿½Ö½ï¿½,ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½Ö¹ï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½Ö¹cache,ï¿½ï¿½Ö¹ï¿½ï¿½ï¿½ï¿½ */
     mpu_set_protection(0x60000000, MPU_REGION_SIZE_64MB, MPU_REGION_NUMBER0, MPU_INSTRUCTION_ACCESS_ENABLE,
                        MPU_REGION_FULL_ACCESS, MPU_ACCESS_NOT_SHAREABLE, MPU_ACCESS_NOT_CACHEABLE, MPU_ACCESS_NOT_BUFFERABLE);
 
-    /*±£»¤SDRAMÇøÓò,¹²32M×Ö½Ú,ÔÊÐíÖ¸Áî·ÃÎÊ,½ûÖ¹¹²ÓÃ,ÔÊÐícache,ÔÊÐí»º³å */
+    /*ï¿½ï¿½ï¿½ï¿½SDRAMï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½32Mï¿½Ö½ï¿½,ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½Ö¹ï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½ï¿½ï¿½cache,ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
     mpu_set_protection(0XC0000000, MPU_REGION_SIZE_32MB, MPU_REGION_NUMBER2, MPU_INSTRUCTION_ACCESS_ENABLE,
                        MPU_REGION_FULL_ACCESS, MPU_ACCESS_NOT_SHAREABLE, MPU_ACCESS_CACHEABLE, MPU_ACCESS_BUFFERABLE);
 
-    /* ±£»¤Õû¸öNAND FLASHÇøÓò,¹²256M×Ö½Ú,ÔÊÐíÖ¸Áî·ÃÎÊ,½ûÖ¹¹²ÓÃ,½ûÖ¹cache,½ûÖ¹»º³å */
+    /* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½NAND FLASHï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½256Mï¿½Ö½ï¿½,ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½Ö¹ï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½Ö¹cache,ï¿½ï¿½Ö¹ï¿½ï¿½ï¿½ï¿½ */
     mpu_set_protection(0X80000000, MPU_REGION_SIZE_256MB, MPU_REGION_NUMBER3, MPU_INSTRUCTION_ACCESS_ENABLE,
                        MPU_REGION_FULL_ACCESS, MPU_ACCESS_NOT_SHAREABLE, MPU_ACCESS_NOT_CACHEABLE, MPU_ACCESS_NOT_BUFFERABLE);
 }
 
 /**
- * @brief       MemManage´íÎó´¦ÀíÖÐ¶Ï
- *   @note      ½øÈë´ËÖÐ¶ÏÒÔºó,½«ÎÞ·¨»Ö¸´³ÌÐòÔËÐÐ!!
+ * @brief       MemManageï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¶ï¿½
+ *   @note      ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¶ï¿½ï¿½Ôºï¿½,ï¿½ï¿½ï¿½Þ·ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½!!
  *
- * @param       ÎÞ
- * @retval      ÎÞ
+ * @param       ï¿½ï¿½
+ * @retval      ï¿½ï¿½
  */
 void MemManage_Handler(void)
 { 
-    LED1(0);                            /* µãÁÁLED1(GREEN LED) */
-    printf("Mem Access Error!!\r\n");   /* Êä³ö´íÎóÐÅÏ¢ */
+    LED1(0);                            /* ï¿½ï¿½ï¿½ï¿½LED1(GREEN LED) */
+    printf("[MEM] stage=%lu\r\n", (unsigned long)g_boot_stage);
+    printf("Mem Access Error!!\r\n");   /* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢ */
     delay_ms(1000);
-    printf("Soft Reseting...\r\n");     /* ÌáÊ¾Èí¼þÖØÆô */
+    printf("Soft Reseting...\r\n");     /* ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
     delay_ms(1000);
-    NVIC_SystemReset();                 /* Èí¸´Î» */
+    NVIC_SystemReset();                 /* ï¿½ï¿½ï¿½ï¿½Î» */
 }

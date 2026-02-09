@@ -108,9 +108,7 @@ void lv_port_disp_init(void)
 /* 初始化 LCD 及相关外设 */
 static void disp_init(void)
 {
-    /* LCD 初始化 + 横屏/竖屏方向设置 */
-    lcd_init();
-	  lcd_display_dir(1);
+    /* LCD 已在 main.c 中初始化，这里不再重复初始化，避免偶发显示异常 */
 }
 
 /* 将内部缓冲区指定区域刷新到 LCD

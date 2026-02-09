@@ -123,10 +123,7 @@ add_executable(dashboard_pc
   src/main.c
   src/app/app.c
   src/app/screens/dashboard.c
-  src/app/data_sim.c
   src/app/obuf.c
-  src/app/proto_lxb.c
-  src/app/lxb_feed.c
   src/app/lv_font_simsun_16_cjk.c
   src/app/my_font_30.c
 )
