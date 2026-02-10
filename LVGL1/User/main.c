@@ -225,6 +225,7 @@ static void process_file_rx(void)
 {
     uint8_t buf[512];
 
+    /* 非文件接收态直接返回，避免误写 */
     if (g_file_rx_state != FILE_RX_DATA) return;
 
     while (g_file_rx_remain > 0) {
@@ -232,14 +233,18 @@ static void process_file_rx(void)
         UINT to_read;
         UINT written = 0;
 
+        /* 缓冲区暂无数据，等下一轮 */
         if (avail == 0) return;
 
+        /* 计算本次可写入的块大小（不超过缓冲区/剩余量/512B） */
         to_read = (UINT)avail;
         if (to_read > sizeof(buf)) to_read = sizeof(buf);
         if (to_read > g_file_rx_remain) to_read = (UINT)g_file_rx_remain;
 
+        /* 从环形缓冲区取出数据并写入文件 */
         obuf_read(&g_rx_buf, buf, to_read);
         if (f_write(&g_file_rx, buf, to_read, &written) != FR_OK || written != to_read) {
+            /* 写失败立即收尾，防止文件损坏 */
             printf("[FATFS] PUT write failed\r\n");
             f_close(&g_file_rx);
             g_file_rx_state = FILE_RX_IDLE;
@@ -247,9 +252,11 @@ static void process_file_rx(void)
             return;
         }
 
+        /* 更新剩余字节数 */
         g_file_rx_remain -= written;
     }
 
+    /* 文件接收完成，关闭文件并恢复空闲状态 */
     f_close(&g_file_rx);
     g_file_rx_state = FILE_RX_IDLE;
     printf("[FATFS] PUT done\r\n");
@@ -541,7 +548,7 @@ static uint32_t g_comm_last_rx_ms = 0;
  *
  * 逻辑:
  * 1. 将接收到的字节直接压入环形缓冲区 (g_rx_buf)。
- * 2. 只有在此处快速缓存，才能应对 115200 波特率下的连续数据流，避免丢包。
+ * 2. 只有在此处快速缓存，才能应对 38400 波特率下的连续数据流，避免丢包。
  * 3. 提供一个 LED 翻转作为物理层的“心跳”指示 (每50字节翻转一次)，方便肉眼判断是否有数据进来。
  * ============================================================================
  */
@@ -602,7 +609,7 @@ typedef enum {
     FIELD_TF
 } field_kind_t;
 
-/* SQMWD_Tablet 旧协议中的 FID 编码（用于 0x09/0x02 子命令） */
+/* SQMWD_Tablet 沿用旧 FID 编码（新帧 0x09/0x02 仍使用） */
 typedef enum {
     OLD_DT_NONE = 0x00,        /* 同步头 */
     OLD_DT_INC  = 0x10,        /* 井斜 */
@@ -911,11 +918,27 @@ int main(void)
             process_file_rx();
         }
 
-        /* A. LVGL任务处理 (30Hz 刷新节流) */
+        /* A. LVGL任务处理 (1Hz 刷新节流)
+         * 无数据持续 >=10s 则暂停刷新；收到数据后恢复
+         */
         {
             static uint32_t last_lvgl_tick = 0;
+            static uint8_t ui_paused = 0;
             uint32_t now = lv_tick_get();
-            if ((now - last_lvgl_tick) >= 200) {
+
+            if (g_comm_last_rx_ms != 0U) {
+                uint32_t dt = HAL_GetTick() - g_comm_last_rx_ms;
+                if (dt >= 10000U) {
+                    ui_paused = 1;
+                } else {
+                    ui_paused = 0;
+                }
+            } else {
+                /* 未收到过数据时保持刷新 */
+                ui_paused = 0;
+            }
+
+            if (!ui_paused && (now - last_lvgl_tick) >= 1000) {
                 last_lvgl_tick = now;
                 lv_timer_handler();
             }
@@ -1176,8 +1199,18 @@ int main(void)
         /* 已取消“基于有效帧”的断开逻辑，避免与字节级通信状态冲突 */
 #endif
 
+        /* 仅在有数据或未超时情况下刷新界面 */
         if (g_ui_dirty) {
-            dashboard_update(&g_metrics);
+            uint8_t allow_refresh = 1;
+            if (g_comm_last_rx_ms != 0U) {
+                uint32_t dt = HAL_GetTick() - g_comm_last_rx_ms;
+                if (dt >= 10000U) {
+                    allow_refresh = 0;
+                }
+            }
+            if (allow_refresh) {
+                dashboard_update(&g_metrics);
+            }
             g_ui_dirty = 0;
         }
 

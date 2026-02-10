@@ -184,17 +184,18 @@ typedef struct {
 } dashboard_ui_t;
 
 // 全局 UI 实例，用于在 update 函数中访问对象
-static dashboard_ui_t g_ui;
-static const uint32_t k_decode_rows = 9;//参数解码表行数
-static char g_msg_text[256];
-static const uint16_t k_msg_line_chars = 18;
-static uint8_t g_msg_active = 0;
-static uint8_t g_msg_persistent = 0;
-static int g_pump_status_last = -1;
-static uint32_t g_pump_status_elapsed_sec = 0;
-static lv_timer_t *g_pump_status_timer = NULL;
-static uint8_t g_pump_status_time_enabled = 0;
+static dashboard_ui_t g_ui;                 /* 全局 UI 句柄集合 */
+static const uint32_t k_decode_rows = 9;    /* 参数解码表行数 */
+static char g_msg_text[256];               /* 弹窗拼接后的最终文本 */
+static const uint16_t k_msg_line_chars = 18; /* 弹窗单行最大字符数(近似) */
+static uint8_t g_msg_active = 0;           /* 弹窗是否显示 */
+static uint8_t g_msg_persistent = 0;       /* 弹窗是否常驻(不自动关闭) */
+static int g_pump_status_last = -1;        /* 上一次开/关泵状态 */
+static uint32_t g_pump_status_elapsed_sec = 0; /* 当前开/关泵持续秒数 */
+static lv_timer_t *g_pump_status_timer = NULL; /* 开关泵计时器 */
+static uint8_t g_pump_status_time_enabled = 0; /* 是否启用开关泵计时 */
 
+/* 更新“开关泵持续时间”显示 */
 static void update_pump_status_time(void)
 {
     if (!g_ui.label_pump_status) {
@@ -211,6 +212,7 @@ static void update_pump_status_time(void)
              (unsigned long)hh,
              (unsigned long)mm,
              (unsigned long)ss);
+    /* 未启用计时时固定显示 00:00:00 */
     if (!g_pump_status_time_enabled) {
         lv_label_set_text(g_ui.label_pump_status, "00:00:00");
         return;
@@ -219,6 +221,7 @@ static void update_pump_status_time(void)
     lv_obj_set_style_text_color(g_ui.label_pump_status, lv_color_black(), 0);
 }
 
+/* 计时器回调：每秒累加并刷新开关泵时间 */
 static void pump_status_timer_cb(lv_timer_t *t)
 {
     (void)t;
@@ -228,6 +231,7 @@ static void pump_status_timer_cb(lv_timer_t *t)
     update_pump_status_time();
 }
 
+/* 行高亮：用于标记“最近更新”的数据行 */
 static void set_row_highlight(lv_obj_t *row, uint8_t on)
 {
     if (!row) {
@@ -242,8 +246,10 @@ static void set_row_highlight(lv_obj_t *row, uint8_t on)
         lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
     }
 }
+/* 弹窗点击关闭回调（前置声明） */
 static void msg_touch_close_cb(lv_event_t *e);
 
+/* 估算 UTF-8 单字符长度 */
 static size_t utf8_char_len(unsigned char c)
 {
     if (c < 0x80) return 1;
@@ -253,6 +259,7 @@ static size_t utf8_char_len(unsigned char c)
     return 1;
 }
 
+/* 将弹窗文本限制为两行，并按 UTF-8 字符数截断 */
 static void build_two_line_msg(const char *text)
 {
     size_t out = 0;
