@@ -174,6 +174,10 @@ Header(0x40 0x46) + CMD(0x09) + LEN + Sub_CMD + Payload + XOR
 - 默认像素格式：RGB565
 - 1280×800 显存占用：约 2.0MB（$1280\times800\times2$）
 
+SDRAM 内存布局（32MB，起始 0xC0000000）：
+- 0xC0000000 ~ 0xC01F3FFF：LTDC 帧缓冲（显存，约 1.94MB）
+- 0xC01F4000 ~ 0xC1FFFFFF：外部 SDRAM 内存池（SRAMEX/LVGL 堆，约 30.05MB）
+
 屏幕时序与像素时钟由 `ltdc_init()` 根据 LCD ID 分支设置。
 
 ---

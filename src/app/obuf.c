@@ -2,13 +2,16 @@
 #include <string.h>
 
 /*
- * obuf - Lock-Free Ring Buffer (SPSC: Single Producer Single Consumer)
- * 
- * Producer (ISR): Modifies "head". Reads "tail".
- * Consumer (App): Modifies "tail". Reads "head".
- * 
- * Strategy: Drop NEW data if full (Standard FIFO). 
- * This prevents the "Overwrite Old" race condition on "tail".
+ * obuf - 单生产者/单消费者(SPSC)环形缓冲
+ *
+ * 线程模型:
+ * - 生产者：串口ISR，仅修改 head，仅读取 tail
+ * - 消费者：主循环，仅修改 tail，仅读取 head
+ *
+ * 设计要点:
+ * 1) ISR 侧写入必须无阻塞、低开销
+ * 2) 缓冲满时“丢新字节”，避免 ISR 与主循环同时改 tail 造成竞态
+ * 3) 通过 dropped 统计丢字节数量，便于排查丢包
  */
 
 void obuf_init(obuf_t *o, uint8_t *storage, size_t capacity)
@@ -28,7 +31,10 @@ void obuf_clear(obuf_t *o)
     o->dropped = 0;
 }
 
-/* Helper to calculate current length available for reading */
+/* 计算当前可读数据长度
+ * - 只做简单算术，不做互斥
+ * - 依赖 SPSC 模型保证 head/tail 不被同一线程同时修改
+ */
 size_t obuf_data_len(const obuf_t *o)
 {
     size_t h = o->head;
@@ -39,23 +45,18 @@ size_t obuf_data_len(const obuf_t *o)
 
 void obuf_write(obuf_t *o, const uint8_t *data, size_t n)
 {
+    /* ISR 侧写入：逐字节入队，满则丢新数据 */
     for (size_t i = 0; i < n; i++) {
         size_t next_head = (o->head + 1) % o->capacity;
-        
-        /* Check if full: (head + 1) == tail */
-        if (next_head != o->tail) {
-            o->buf[o->head] = data[i];
-            /* 
-             * Memory Barrier is ideally needed here for weak ordered CPUs.
-             * Cortex-M7 (stm32F7) ensures order for Normal-NonCacheable or Device memory.
-             * But for safety, we update index AFTER data write.
-             */
-            o->head = next_head; 
-        } else {
-            /* Buffer Full - Drop NEW incoming byte */
-            /* Do not touch tail, to avoid race with Consumer */
+
+        /* Buffer full: drop NEW incoming byte (safe for SPSC) */
+        if (next_head == o->tail) {
             o->dropped++;
+            continue;
         }
+
+        o->buf[o->head] = data[i];
+        o->head = next_head;
     }
 }
 
@@ -65,7 +66,7 @@ size_t obuf_read(obuf_t *o, uint8_t *out, size_t n)
     size_t t = o->tail;
     size_t h = o->head;
     
-    /* Calculate available linear segments could be faster, but byte-by-byte is simpler */
+    /* 简化实现：按字节读取，逻辑清晰；足以满足串口速率 */
     for (i = 0; i < n; i++) {
         if (t == h) { // Empty
             break;
@@ -74,12 +75,13 @@ size_t obuf_read(obuf_t *o, uint8_t *out, size_t n)
         t = (t + 1) % o->capacity;
     }
     
-    o->tail = t; /* Update shared tail pointer once */
+    o->tail = t; /* 统一更新尾指针，减少共享变量写入次数 */
     return i;
 }
 
 /*
- * obuf_peek: Read byte at "index" relative to "tail"
+ * obuf_peek: 读取“从队头起第 index 个字节”
+ * - 不消费数据，用于解析时查看帧头/长度/校验
  */
 int obuf_peek(const obuf_t *o, size_t index)
 {
@@ -100,7 +102,7 @@ void obuf_drop(obuf_t *o, size_t n)
         n = len; /* Limit to available */
     }
     
-    /* Advance tail */
+    /* 推进尾指针，相当于丢弃 n 字节 */
     o->tail = (o->tail + n) % o->capacity;
 }
 
@@ -112,7 +114,7 @@ int obuf_find(const obuf_t *o, const uint8_t *pattern, size_t pattern_len)
         return -1;
     }
 
-    /* Brute-force search */
+    /* 暴力搜索帧头：足够快且实现简单 */
     for (size_t i = 0; i <= len - pattern_len; i++) {
         size_t matched = 0;
         for (size_t j = 0; j < pattern_len; j++) {
